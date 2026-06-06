@@ -339,9 +339,36 @@ export default function AdminPage() {
       </div>
 
       <div className="mb-10">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3 mt-6">Knockout Bracket</h2>
+        <div className="flex items-center justify-between mt-6 mb-3">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500">Knockout Bracket</h2>
+          <button
+            onClick={async () => {
+              setSaving(true);
+              setStatus("Auto-filling R32…");
+              const res = await fetch("/api/autofill-r32", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ secret }),
+              });
+              const data = await res.json();
+              setStatus(`Auto-fill done: ${data.filled ?? 0} slots filled`);
+              // Reload knockout matches
+              const { matches: kms } = await fetch("/api/knockout").then(r => r.json());
+              setKoMatches(kms);
+              const drafts: Record<number, { home: string; away: string }> = {};
+              for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
+              setKoTeamDrafts(drafts);
+              setSaving(false);
+              setTimeout(() => setStatus(""), 3000);
+            }}
+            disabled={saving}
+            className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium"
+          >
+            Auto-fill R32 from group results
+          </button>
+        </div>
         <p className="text-gray-600 text-xs mb-4">
-          Fill in team names as they qualify, then set results. Predictions unlock for users once both teams are entered.
+          Auto-fill resolves 1st/2nd place slots from group results. 3rd-place slots remain for manual entry.
         </p>
         {(["r32", "r16", "qf", "sf", "third", "final"] as Round[]).map((round) => {
           const rms = koMatches.filter((m) => m.round === round);
