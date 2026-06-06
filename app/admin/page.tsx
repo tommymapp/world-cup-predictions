@@ -1,12 +1,46 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { INDIVIDUAL_AWARDS, TEAM_POSITIONS, FORMATIONS, FORMATION_KEY } from "@/lib/awards";
+import { INDIVIDUAL_AWARDS, FORMATIONS, FORMATION_KEY, TEAM_GK_KEY, getFormationLayout } from "@/lib/awards";
 import { ROUND_LABELS, slotLabel, type Round } from "@/lib/knockout";
 import { GROUPS, GROUP_NAMES } from "@/lib/groups";
 import { THIRD_PLACE_MATCH_ORDER } from "@/lib/third-place";
 
 type GroupResults = Record<string, Record<number, string>>; // group → position → team
+
+function AdminPositionInput({ pos, awardDrafts, setAwardDrafts, saveAward, awardResults }: {
+  pos: { key: string; label: string };
+  awardDrafts: Record<string, string>;
+  setAwardDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  saveAward: (key: string, val: string) => void;
+  awardResults: Record<string, string>;
+}) {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+      <label className="block text-xs font-bold text-gray-500 mb-1">{pos.label}</label>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={awardDrafts[pos.key] ?? ""}
+          onChange={(e) => setAwardDrafts((p) => ({ ...p, [pos.key]: e.target.value }))}
+          onBlur={() => saveAward(pos.key, awardDrafts[pos.key] ?? "")}
+          onKeyDown={(e) => e.key === "Enter" && saveAward(pos.key, awardDrafts[pos.key] ?? "")}
+          placeholder="Player…"
+          className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-green-500"
+        />
+        <button
+          onClick={() => saveAward(pos.key, awardDrafts[pos.key] ?? "")}
+          className="bg-green-700 hover:bg-green-600 text-white px-2 py-1.5 rounded text-sm"
+        >
+          ✓
+        </button>
+      </div>
+      {awardResults[pos.key] && (
+        <p className="text-xs text-green-400 mt-1">Current: {awardResults[pos.key]}</p>
+      )}
+    </div>
+  );
+}
 
 type KOMatch = {
   id: number;
@@ -383,29 +417,37 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[{ key: "team_gk", label: "GK" }, ...TEAM_POSITIONS.filter((p) => p.key !== "team_gk")].map((pos) => (
-            <div key={pos.key} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-              <label className="block text-xs font-bold text-gray-500 mb-1">{pos.label}</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={awardDrafts[pos.key] ?? ""}
-                  onChange={(e) => setAwardDrafts((p) => ({ ...p, [pos.key]: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && saveAward(pos.key, awardDrafts[pos.key] ?? "")}
-                  placeholder="Player…"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-green-500"
-                />
-                <button
-                  onClick={() => saveAward(pos.key, awardDrafts[pos.key] ?? "")}
-                  className="bg-green-700 hover:bg-green-600 text-white px-2 py-1.5 rounded text-sm"
-                >
-                  ✓
-                </button>
-              </div>
+        {(() => {
+          const formation = awardResults[FORMATION_KEY] ?? "";
+          const layout = getFormationLayout(formation);
+
+          if (!formation) return (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center text-gray-500 text-sm">
+              Select a formation above to fill in the team
             </div>
-          ))}
-        </div>
+          );
+
+          return (
+            <div className="space-y-3">
+              {/* GK */}
+              <div className="flex justify-center">
+                <div className="w-48">
+                  {[{ key: TEAM_GK_KEY, label: "GK" }].map((pos) => (
+                    <AdminPositionInput key={pos.key} pos={pos} awardDrafts={awardDrafts} setAwardDrafts={setAwardDrafts} saveAward={saveAward} awardResults={awardResults} />
+                  ))}
+                </div>
+              </div>
+              {/* Formation rows */}
+              {layout.map((row, i) => (
+                <div key={i} className="grid gap-3" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
+                  {row.map((pos) => (
+                    <AdminPositionInput key={pos.key} pos={pos} awardDrafts={awardDrafts} setAwardDrafts={setAwardDrafts} saveAward={saveAward} awardResults={awardResults} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>}
 
       {activeTab === "knockout" && <div className="mb-10">

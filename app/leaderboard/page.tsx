@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ROUND_LABELS, ROUND_POINTS, type Round } from "@/lib/knockout";
-import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
+import { INDIVIDUAL_AWARDS } from "@/lib/awards";
 import { GROUP_NAMES } from "@/lib/groups";
 
 type GroupScore = { player_name: string; group_points: string };
@@ -25,10 +25,16 @@ type Breakdown = { groups: { group: string; picks: GroupPick[] }[]; knockout: Ko
 const POS_LABEL: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
 const ROUNDS: Round[] = ["r32", "r16", "qf", "sf", "third", "final"];
 
-const ALL_AWARD_META: Record<string, { label: string; icon: string }> = {
-  ...Object.fromEntries(INDIVIDUAL_AWARDS.map(a => [a.key, { label: a.label, icon: a.icon }])),
-  ...Object.fromEntries(TEAM_POSITIONS.map(p => [p.key, { label: p.label, icon: "👤" }])),
-};
+const INDIVIDUAL_AWARD_META: Record<string, { label: string; icon: string }> =
+  Object.fromEntries(INDIVIDUAL_AWARDS.map(a => [a.key, { label: a.label, icon: a.icon }]));
+
+function teamKeyLabel(key: string): string {
+  if (key === "team_gk") return "GK";
+  const m = key.match(/^team_([dmaf])(\d)$/);
+  if (!m) return key.replace("team_", "").toUpperCase();
+  const tier = m[1] === "d" ? "DEF" : m[1] === "m" ? "MID" : m[1] === "a" ? "AM" : "FWD";
+  return `${tier} ${m[2]}`;
+}
 
 function BreakdownPanel({ data }: { data: Breakdown }) {
   // ── Group stage ──────────────────────────────────────────────────────────────
@@ -128,11 +134,11 @@ function BreakdownPanel({ data }: { data: Breakdown }) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Individual Awards</span>
-            <span className="text-xs text-yellow-400 font-semibold">{indAwards.filter(a => a.correct).length} pts</span>
+            <span className="text-xs text-yellow-400 font-semibold">{indAwards.filter(a => a.correct).length * 10} pts</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
             {indAwards.map(a => {
-              const meta = ALL_AWARD_META[a.award_key];
+              const meta = INDIVIDUAL_AWARD_META[a.award_key];
               return (
                 <div key={a.award_key} className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${
                   a.correct ? "bg-green-950/40 text-green-300" :
@@ -156,23 +162,20 @@ function BreakdownPanel({ data }: { data: Breakdown }) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Team of the Tournament</span>
-            <span className="text-xs text-yellow-400 font-semibold">{teamAwards.filter(a => a.correct).length} pts</span>
+            <span className="text-xs text-yellow-400 font-semibold">{teamAwards.filter(a => a.correct).length * 5} pts</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-            {teamAwards.map(a => {
-              const meta = ALL_AWARD_META[a.award_key];
-              return (
-                <div key={a.award_key} className={`flex flex-col rounded px-2 py-1.5 text-xs ${
-                  a.correct ? "bg-green-950/40 text-green-300" :
-                  a.actual  ? "bg-red-950/20 text-red-300" :
-                              "bg-gray-800/50 text-gray-400"
-                }`}>
-                  <span className="text-gray-600 text-xs">{meta?.label ?? a.award_key}</span>
-                  <span className="font-medium truncate">{a.predicted}</span>
-                  {!a.correct && a.actual && <span className="text-gray-600 truncate">→ {a.actual}</span>}
-                </div>
-              );
-            })}
+            {teamAwards.map(a => (
+              <div key={a.award_key} className={`flex flex-col rounded px-2 py-1.5 text-xs ${
+                a.correct ? "bg-green-950/40 text-green-300" :
+                a.actual  ? "bg-red-950/20 text-red-300" :
+                            "bg-gray-800/50 text-gray-400"
+              }`}>
+                <span className="text-gray-600 text-xs">{teamKeyLabel(a.award_key)}</span>
+                <span className="font-medium truncate">{a.predicted}</span>
+                {!a.correct && a.actual && <span className="text-gray-600 truncate">→ {a.actual}</span>}
+              </div>
+            ))}
           </div>
         </div>
       )}
