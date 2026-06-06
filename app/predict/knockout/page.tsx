@@ -210,38 +210,17 @@ function MatchCard({
   const homeLabel = expectedHome ?? slotLabel(match.home_slot);
   const awayLabel = expectedAway ?? slotLabel(match.away_slot);
 
-  const adminHome = cleanTeam(match.home_team);
-  const adminAway = cleanTeam(match.away_team);
-  const winner =
-    match.result === "home" ? adminHome :
-    match.result === "away" ? adminAway : null;
-
-  const correct = !!prediction && !!winner && prediction === winner;
-  const wrong   = !!prediction && !!winner && prediction !== winner;
-
   function teamClass(team: string | null) {
     if (!team) return "flex-1 py-2 px-2 rounded text-xs text-gray-600 bg-gray-800/50 italic truncate text-center cursor-not-allowed";
     const isPick = prediction === team;
-    const isWinner = winner === team;
-    if (isPick && isWinner)  return "flex-1 py-2 px-2 rounded text-sm font-semibold bg-green-700/80 text-white truncate text-center";
-    if (isPick && !isWinner && winner) return "flex-1 py-2 px-2 rounded text-sm font-semibold bg-red-900/50 text-red-300 truncate text-center";
-    if (isPick)              return "flex-1 py-2 px-2 rounded text-sm font-semibold bg-yellow-500 text-black truncate text-center";
-    if (isWinner)            return "flex-1 py-2 px-2 rounded text-sm bg-green-900/30 text-green-400 border border-green-800 hover:bg-green-900/50 truncate text-center";
+    if (isPick) return "flex-1 py-2 px-2 rounded text-sm font-semibold bg-yellow-500 text-black truncate text-center";
     return "flex-1 py-2 px-2 rounded text-sm bg-gray-800 text-gray-200 hover:bg-gray-700 truncate text-center";
   }
 
   return (
-    <div className={`rounded-lg border p-3 ${
-      correct ? "border-green-600 bg-green-950/40" :
-      wrong   ? "border-red-800 bg-red-950/20" :
-                "border-gray-800 bg-gray-900"
-    }`}>
+    <div className="rounded-lg border p-3 border-gray-800 bg-gray-900">
       <div className="flex items-center justify-between mb-2 text-xs text-gray-500">
         <span>M{match.match_number} · {ROUND_POINTS[match.round]}pt</span>
-        <span>
-          {correct && <span className="text-green-400 font-semibold">+{ROUND_POINTS[match.round]} ✓</span>}
-          {wrong && winner && <span className="text-red-400">✗ {winner}</span>}
-        </span>
       </div>
 
       <div className="flex gap-1.5">
