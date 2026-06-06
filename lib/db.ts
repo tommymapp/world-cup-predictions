@@ -6,7 +6,10 @@ const connectionString =
   process.env.STORAGE_POSTGRES_URL ||
   process.env.DATABASE_URL;
 
-const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false, checkServerIdentity: () => undefined },
+});
 
 // Tagged template literal helper — same API as @vercel/postgres
 export async function sql(
