@@ -1,54 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseThirdPlaceWikitext, lookupThirdPlace } from '@/lib/third-place';
-
-const WIKI_PAGE = '2026 FIFA World Cup third-place table';
-const WIKI_API  = 'https://en.wikipedia.org/w/api.php';
-
-// Cache parsed table for the lifetime of the serverless instance
-let cachedTable: Map<string, Record<number, string>> | null = null;
-
-async function getTable(): Promise<Map<string, Record<number, string>>> {
-  if (cachedTable) return cachedTable;
-
-  const url = `${WIKI_API}?action=parse&page=${encodeURIComponent(WIKI_PAGE)}&prop=wikitext&format=json&formatversion=2`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'WC2026Predictions/1.0' },
-    next: { revalidate: 3600 },
-  });
-  const json = await res.json();
-  const wikitext: string = json?.parse?.wikitext ?? '';
-  cachedTable = parseThirdPlaceWikitext(wikitext);
-  return cachedTable;
-}
+import { sql } from '@/lib/db';
 
 // GET /api/third-place-lookup?groups=ABCDEFGH
-// Returns: { assignments: { "74": "A", "77": "H", ... }, found: true }
-// or      { found: false } if combination not in table
+// Returns the match slot assignments for the given 8-group combination.
 export async function GET(req: NextRequest) {
   const groupsParam = req.nextUrl.searchParams.get('groups') ?? '';
-  const groups = groupsParam.toUpperCase().split('').filter(c => /[A-L]/.test(c));
+  const groups = [...new Set(groupsParam.toUpperCase().split('').filter(c => /[A-L]/.test(c)))];
 
   if (groups.length !== 8) {
-    return NextResponse.json({ error: 'Exactly 8 group letters required' }, { status: 400 });
+    return NextResponse.json({ error: 'Exactly 8 distinct group letters required' }, { status: 400 });
   }
 
-  try {
-    const table = await getTable();
-    const result = lookupThirdPlace(groups, table);
+  const key = [...groups].sort().join('');
 
-    if (!result) {
-      return NextResponse.json({
-        found: false,
-        tableSize: table.size,
-        key: [...groups].sort().join(''),
-      });
-    }
+  const { rows } = await sql`
+    SELECT m74, m77, m79, m80, m81, m82, m85, m87
+    FROM third_place_table
+    WHERE groups_key = ${key}
+  `;
 
-    return NextResponse.json({ found: true, assignments: result });
-  } catch (e) {
-    return NextResponse.json(
-      { error: 'Failed to fetch table', detail: String(e) },
-      { status: 503 }
-    );
+  if (rows.length === 0) {
+    return NextResponse.json({ found: false, key });
   }
+
+  const r = rows[0];
+  return NextResponse.json({
+    found: true,
+    assignments: {
+      74: r.m74, 77: r.m77, 79: r.m79, 80: r.m80,
+      81: r.m81, 82: r.m82, 85: r.m85, 87: r.m87,
+    },
+  });
 }

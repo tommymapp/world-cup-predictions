@@ -103,6 +103,19 @@ export async function setupDb() {
       PRIMARY KEY (group_name, position)
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS third_place_table (
+      groups_key TEXT PRIMARY KEY,
+      m74 TEXT NOT NULL,
+      m77 TEXT NOT NULL,
+      m79 TEXT NOT NULL,
+      m80 TEXT NOT NULL,
+      m81 TEXT NOT NULL,
+      m82 TEXT NOT NULL,
+      m85 TEXT NOT NULL,
+      m87 TEXT NOT NULL
+    )
+  `;
   // prediction stores the team name the player thinks will WIN this match
   await sql`
     DROP TABLE IF EXISTS knockout_predictions
