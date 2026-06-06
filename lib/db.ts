@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 
 const connectionString =
+  process.env.STORAGE_DB_SUPABASE_URL ||
   process.env.POSTGRES_URL ||
   process.env.STORAGE_URL ||
   process.env.STORAGE_POSTGRES_URL ||
