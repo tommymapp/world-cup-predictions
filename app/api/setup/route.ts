@@ -5,7 +5,7 @@ import { KNOCKOUT_MATCHES } from '@/lib/knockout';
 import { parseThirdPlaceWikitext } from '@/lib/third-place';
 
 const WIKI_API  = 'https://en.wikipedia.org/w/api.php';
-const WIKI_PAGE = '2026 FIFA World Cup third-place table';
+const WIKI_PAGE = 'Template:2026 FIFA World Cup third-place table';
 
 export async function POST() {
   await setupDb();
@@ -44,6 +44,8 @@ export async function POST() {
       const wikitext: string = json?.parse?.wikitext ?? '';
 
       const table = parseThirdPlaceWikitext(wikitext);
+
+      console.log(`Seeding third-place table with ${table.size} rows...`);
 
       for (const [key, row] of table) {
         await sql`
