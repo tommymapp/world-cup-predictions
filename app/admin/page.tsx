@@ -23,17 +23,10 @@ export default function AdminPage() {
     if (s) { setSecret(s); setAuthed(true); }
   }, []);
 
-  async function login() {
-    const res = await fetch("/api/matches");
-    if (res.ok) {
-      sessionStorage.setItem("wc_admin_secret", secret);
-      setMatched(await res.json());
-      setAuthed(true);
-    }
-  }
-
-  function setMatched(data: Match[]) {
-    setMatches(data);
+  function login() {
+    if (!secret.trim()) return;
+    sessionStorage.setItem("wc_admin_secret", secret);
+    setAuthed(true);
   }
 
   useEffect(() => {
