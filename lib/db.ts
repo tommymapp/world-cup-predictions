@@ -1,6 +1,13 @@
-import { sql } from '@vercel/postgres';
+import { createPool } from '@vercel/postgres';
 
-export { sql };
+const connectionString =
+  process.env.POSTGRES_URL ||
+  process.env.STORAGE_URL ||
+  process.env.STORAGE_POSTGRES_URL ||
+  process.env.DATABASE_URL;
+
+const pool = createPool({ connectionString });
+export const sql = pool.sql.bind(pool);
 
 export async function setupDb() {
   await sql`
