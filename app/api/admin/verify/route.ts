@@ -10,19 +10,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid secret' }, { status: 401 });
   }
 
-  const resolvedVar =
-    process.env.STORAGE_DB_SUPABASE_URL ? 'STORAGE_DB_SUPABASE_URL' :
-    process.env.POSTGRES_URL ? 'POSTGRES_URL' :
-    process.env.STORAGE_URL ? 'STORAGE_URL' :
-    process.env.STORAGE_POSTGRES_URL ? 'STORAGE_POSTGRES_URL' :
-    process.env.DATABASE_URL ? 'DATABASE_URL' :
-    'none';
+  const host = process.env.STORAGE_POSTGRES_HOST ?? 'not set';
 
   try {
     await sql`SELECT 1`;
   } catch (e) {
     return NextResponse.json(
-      { error: 'Database unreachable', resolvedVar, detail: e instanceof Error ? e.message : String(e) },
+      { error: 'Database unreachable', host, detail: e instanceof Error ? e.message : String(e) },
       { status: 503 }
     );
   }

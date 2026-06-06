@@ -1,15 +1,14 @@
 import { Pool } from 'pg';
 
-const connectionString =
-  process.env.STORAGE_DB_SUPABASE_URL ||
-  process.env.POSTGRES_URL ||
-  process.env.STORAGE_URL ||
-  process.env.STORAGE_POSTGRES_URL ||
-  process.env.DATABASE_URL;
-
+// Connect directly to the DB host (not the pgBouncer pooler) to avoid
+// the self-signed cert in Supabase's pooler infrastructure.
 const pool = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false, checkServerIdentity: () => undefined },
+  host: process.env.STORAGE_POSTGRES_HOST,
+  user: process.env.STORAGE_POSTGRES_USER,
+  password: process.env.STORAGE_POSTGRES_PASSWORD,
+  database: process.env.STORAGE_POSTGRES_DATABASE ?? 'postgres',
+  port: 5432,
+  ssl: { rejectUnauthorized: false },
 });
 
 // Tagged template literal helper — same API as @vercel/postgres
