@@ -27,6 +27,8 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [groupResults, setGroupResults] = useState<GroupResults>({});
+  const [fetchLog, setFetchLog] = useState<string[]>([]);
+  const [fetching, setFetching] = useState(false);
   const [awardResults, setAwardResults] = useState<Record<string, string>>({});
   const [awardDrafts, setAwardDrafts] = useState<Record<string, string>>({});
   const [koMatches, setKoMatches] = useState<KOMatch[]>([]);
@@ -113,6 +115,40 @@ export default function AdminPage() {
     setStatus("Saved");
     setTimeout(() => setStatus(""), 2000);
     setSaving(false);
+  }
+
+  async function fetchLatest() {
+    setFetching(true);
+    setFetchLog(['Fetching from Wikipedia…']);
+    const res = await fetch("/api/fetch-latest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setFetchLog(data.log ?? []);
+      const { koTeamsSet, koResultsSet, groupPositionsSet } = data.summary ?? {};
+      setStatus(`Fetched: ${koTeamsSet ?? 0} team slots, ${koResultsSet ?? 0} results, ${groupPositionsSet ?? 0} group positions updated`);
+      // Reload knockout matches and group results
+      fetch("/api/knockout").then(r => r.json()).then(({ matches: kms }) => {
+        setKoMatches(kms);
+        const drafts: Record<number, { home: string; away: string }> = {};
+        for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
+        setKoTeamDrafts(drafts);
+      });
+      fetch("/api/group-results").then(r => r.json()).then(({ results }) => {
+        const gr: GroupResults = {};
+        for (const row of results) {
+          if (!gr[row.group_name]) gr[row.group_name] = {};
+          gr[row.group_name][row.position] = row.team;
+        }
+        setGroupResults(gr);
+      });
+    } else {
+      setFetchLog([`Error: ${data.error}`]);
+    }
+    setFetching(false);
   }
 
   async function runSetup() {
@@ -206,8 +242,15 @@ export default function AdminPage() {
       )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Admin — Enter Results</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {status && <span className="text-sm text-green-400">{status}</span>}
+          <button
+            onClick={fetchLatest}
+            disabled={fetching}
+            className="bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium"
+          >
+            {fetching ? "Fetching…" : "⬇ Fetch Latest"}
+          </button>
           <button
             onClick={runSetup}
             className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm"
@@ -216,6 +259,25 @@ export default function AdminPage() {
           </button>
         </div>
       </div>
+
+      {fetchLog.length > 0 && (
+        <div className="mb-6 bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Fetch log</span>
+            <button onClick={() => setFetchLog([])} className="text-gray-600 hover:text-gray-400 text-xs">clear</button>
+          </div>
+          <ul className="text-xs text-gray-400 space-y-0.5 font-mono max-h-48 overflow-y-auto">
+            {fetchLog.map((line, i) => (
+              <li key={i} className={
+                line.startsWith('⚠') ? 'text-yellow-500' :
+                line.startsWith('  Group') ? 'text-green-400' :
+                line.includes('→') ? 'text-blue-400' :
+                'text-gray-500'
+              }>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mb-10">
         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Individual Awards</h2>
