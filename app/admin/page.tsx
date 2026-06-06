@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
 import { ROUND_LABELS, slotLabel, type Round } from "@/lib/knockout";
 import { GROUPS, GROUP_NAMES } from "@/lib/groups";
+import { THIRD_PLACE_MATCH_ORDER } from "@/lib/third-place";
 
 type GroupResults = Record<string, Record<number, string>>; // group → position → team
 
@@ -29,10 +30,12 @@ export default function AdminPage() {
   const [groupResults, setGroupResults] = useState<GroupResults>({});
   const [fetchLog, setFetchLog] = useState<string[]>([]);
   const [fetching, setFetching] = useState(false);
+  const [qualifyingGroups, setQualifyingGroups] = useState<Set<string>>(new Set());
   const [awardResults, setAwardResults] = useState<Record<string, string>>({});
   const [awardDrafts, setAwardDrafts] = useState<Record<string, string>>({});
   const [koMatches, setKoMatches] = useState<KOMatch[]>([]);
   const [koTeamDrafts, setKoTeamDrafts] = useState<Record<number, { home: string; away: string }>>({});
+  const [thirdAssignments, setThirdAssignments] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const s = sessionStorage.getItem("wc_admin_secret");
@@ -187,7 +190,42 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ secret, matchId, result: result ?? "" }),
     });
+
+    const match = koMatches.find((m) => m.id === matchId);
     setKoMatches((prev) => prev.map((m) => m.id === matchId ? { ...m, result } : m));
+
+    if (match) {
+      const num = match.match_number;
+      const winner = result === "home" ? match.home_team : result === "away" ? match.away_team : null;
+      const loser  = result === "home" ? match.away_team : result === "away" ? match.home_team : null;
+
+      const updates: { id: number; home?: string | null; away?: string | null }[] = [];
+      for (const m of koMatches) {
+        if (m.id === matchId) continue;
+        const upd: { id: number; home?: string | null; away?: string | null } = { id: m.id };
+        if (m.home_slot === `W${num}`) upd.home = winner;
+        if (m.away_slot === `W${num}`) upd.away = winner;
+        if (m.home_slot === `L${num}`) upd.home = loser;
+        if (m.away_slot === `L${num}`) upd.away = loser;
+        if (upd.home !== undefined || upd.away !== undefined) updates.push(upd);
+      }
+
+      if (updates.length > 0) {
+        await Promise.all(updates.map((u) =>
+          fetch("/api/knockout/results", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ secret, matchId: u.id, homeTeam: u.home, awayTeam: u.away }),
+          })
+        ));
+        const { matches: kms } = await fetch("/api/knockout").then((r) => r.json());
+        setKoMatches(kms);
+        const drafts: Record<number, { home: string; away: string }> = {};
+        for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
+        setKoTeamDrafts(drafts);
+      }
+    }
+
     setStatus("Result saved");
     setTimeout(() => setStatus(""), 2000);
   }
@@ -205,6 +243,15 @@ export default function AdminPage() {
     }
   }
 
+  async function handleQualifyingChange(groups: Set<string>) {
+    setQualifyingGroups(groups);
+    if (groups.size !== 8) { setThirdAssignments({}); return; }
+    const key = [...groups].sort().join("");
+    const res = await fetch(`/api/third-place-lookup?groups=${key}`);
+    const data = await res.json();
+    if (data.found) setThirdAssignments(data.assignments);
+    else setThirdAssignments({});
+  }
 
   if (!authed) {
     return (
@@ -348,7 +395,7 @@ export default function AdminPage() {
               const res = await fetch("/api/autofill-r32", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ secret }),
+                body: JSON.stringify({ secret, qualifyingGroups: [...qualifyingGroups] }),
               });
               const data = await res.json();
               setStatus(`Auto-fill done: ${data.filled ?? 0} slots filled`);
@@ -368,8 +415,68 @@ export default function AdminPage() {
           </button>
         </div>
         <p className="text-gray-600 text-xs mb-4">
-          Auto-fill resolves 1st/2nd place slots from group results. 3rd-place slots remain for manual entry.
+          Auto-fill resolves 1st/2nd/3rd place slots from group results. Select 8 qualifying groups below first to include 3rd-place slots.
         </p>
+
+        {/* Third-place qualifier selector */}
+        <div className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-gray-500">3rd Place Qualifiers</h3>
+            <span className="text-xs text-gray-600">{qualifyingGroups.size}/8 selected</span>
+          </div>
+          <p className="text-xs text-gray-600 mb-3">
+            Select the 8 groups whose 3rd-place team advanced. Used to assign the correct team to each 3rd-place R32 slot.
+          </p>
+          <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5 mb-3">
+            {GROUP_NAMES.map(g => {
+              const team3rd = groupResults[g]?.[3];
+              const selected = qualifyingGroups.has(g);
+              const disabled = !selected && qualifyingGroups.size >= 8;
+              return (
+                <button
+                  key={g}
+                  onClick={() => {
+                    const next = new Set(qualifyingGroups);
+                    if (next.has(g)) next.delete(g);
+                    else if (next.size < 8) next.add(g);
+                    handleQualifyingChange(next);
+                  }}
+                  disabled={disabled}
+                  className={`rounded-lg border py-2 flex flex-col items-center gap-0.5 transition-colors ${
+                    selected
+                      ? "border-blue-500 bg-blue-900/30 text-blue-300"
+                      : disabled
+                        ? "border-gray-800 bg-gray-900 text-gray-700 cursor-not-allowed"
+                        : "border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-500"
+                  }`}
+                >
+                  <span className="text-sm font-bold">{g}</span>
+                  <span className="text-xs text-gray-600 truncate w-full text-center px-0.5" title={team3rd}>
+                    {team3rd ? team3rd.split(" ")[0] : "?"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {qualifyingGroups.size === 8 && Object.keys(thirdAssignments).length > 0 && (
+            <div className="border-t border-gray-800 pt-3">
+              <p className="text-xs text-gray-500 mb-2">Slot assignments from FIFA table:</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {THIRD_PLACE_MATCH_ORDER.map(matchNum => {
+                  const group = thirdAssignments[matchNum];
+                  const team = group ? groupResults[group]?.[3] : null;
+                  return (
+                    <div key={matchNum} className="bg-gray-800 rounded px-2 py-1.5 text-xs">
+                      <span className="text-gray-500">M{matchNum}</span>
+                      <div className="font-semibold text-blue-300 truncate">{team ?? `3rd ${group ?? "?"}`}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {(["r32", "r16", "qf", "sf", "third", "final"] as Round[]).map((round) => {
           const rms = koMatches.filter((m) => m.round === round);
           if (rms.length === 0) return null;

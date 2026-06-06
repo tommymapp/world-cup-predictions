@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ROUND_LABELS, ROUND_POINTS, type Round } from "@/lib/knockout";
+import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
+import { GROUP_NAMES } from "@/lib/groups";
 
 type GroupScore = { player_name: string; group_points: string };
 type AwardScore = { player_name: string; award_points: string };
-type KoScore = { player_name: string; knockout_points: string };
+type KoScore    = { player_name: string; knockout_points: string };
 
 type Row = {
   player_name: string;
@@ -14,10 +17,178 @@ type Row = {
   total: number;
 };
 
+type GroupPick = { position: number; predicted: string; actual: string | null; correct: boolean };
+type KoPick    = { match_number: number; round: string; predicted: string; actual_winner: string | null; settled: boolean; correct: boolean; points: number };
+type AwardPick = { award_key: string; predicted: string; actual: string | null; correct: boolean };
+type Breakdown = { groups: { group: string; picks: GroupPick[] }[]; knockout: KoPick[]; awards: AwardPick[] };
+
+const POS_LABEL: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
+const ROUNDS: Round[] = ["r32", "r16", "qf", "sf", "third", "final"];
+
+const ALL_AWARD_META: Record<string, { label: string; icon: string }> = {
+  ...Object.fromEntries(INDIVIDUAL_AWARDS.map(a => [a.key, { label: a.label, icon: a.icon }])),
+  ...Object.fromEntries(TEAM_POSITIONS.map(p => [p.key, { label: p.label, icon: "👤" }])),
+};
+
+function BreakdownPanel({ data }: { data: Breakdown }) {
+  // ── Group stage ──────────────────────────────────────────────────────────────
+  const groupsByName: Record<string, GroupPick[]> = {};
+  for (const g of data.groups) groupsByName[g.group] = g.picks;
+
+  // ── Knockout by round ────────────────────────────────────────────────────────
+  const koByRound: Record<string, KoPick[]> = {};
+  for (const m of data.knockout) {
+    if (!koByRound[m.round]) koByRound[m.round] = [];
+    koByRound[m.round].push(m);
+  }
+
+  // ── Awards split ─────────────────────────────────────────────────────────────
+  const individualKeys = new Set(INDIVIDUAL_AWARDS.map(a => a.key));
+  const indAwards  = data.awards.filter(a => individualKeys.has(a.award_key));
+  const teamAwards = data.awards.filter(a => !individualKeys.has(a.award_key));
+
+  const totalGroupPts  = data.groups.flatMap(g => g.picks).filter(p => p.correct).length;
+  const totalKoPts     = data.knockout.filter(m => m.correct).reduce((s, m) => s + m.points, 0);
+  const totalAwardPts  = data.awards.filter(a => a.correct).length;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-800 space-y-5 text-sm">
+
+      {/* Groups */}
+      {data.groups.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Group Stage</span>
+            <span className="text-xs text-yellow-400 font-semibold">{totalGroupPts} pts</span>
+          </div>
+          <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
+            {GROUP_NAMES.map(g => {
+              const picks = groupsByName[g] ?? [];
+              const correct = picks.filter(p => p.correct).length;
+              const settled = picks.filter(p => p.actual !== null).length;
+              const hasPicks = picks.length > 0;
+              return (
+                <div
+                  key={g}
+                  className={`rounded border py-1.5 flex flex-col items-center gap-0.5 ${
+                    !hasPicks ? "border-gray-800 opacity-40" :
+                    correct > 0 ? "border-green-800 bg-green-950/30" : "border-gray-800 bg-gray-900"
+                  }`}
+                  title={picks.map(p => `${POS_LABEL[p.position]}: ${p.predicted}${p.actual ? (p.correct ? " ✓" : ` → ${p.actual}`) : ""}`).join("\n")}
+                >
+                  <span className="text-xs font-bold text-gray-400">{g}</span>
+                  {hasPicks ? (
+                    <span className={`text-xs font-bold ${correct > 0 ? "text-green-400" : settled > 0 ? "text-gray-600" : "text-gray-500"}`}>
+                      {settled > 0 ? `${correct}/${settled}` : `${picks.length}✎`}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-700">—</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Knockout */}
+      {data.knockout.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Knockout</span>
+            <span className="text-xs text-yellow-400 font-semibold">{totalKoPts} pts</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {ROUNDS.map(round => {
+              const picks = koByRound[round] ?? [];
+              if (picks.length === 0) return null;
+              const settled = picks.filter(m => m.settled);
+              const correct = picks.filter(m => m.correct);
+              const pts = correct.reduce((s, m) => s + m.points, 0);
+              return (
+                <div key={round} className="bg-gray-800/60 rounded px-2 py-1.5">
+                  <div className="text-xs text-gray-500 leading-tight">{ROUND_LABELS[round]}</div>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className={`font-bold text-sm ${pts > 0 ? "text-green-400" : "text-gray-600"}`}>
+                      {settled.length > 0 ? `${correct.length}/${settled.length}` : `${picks.length}✎`}
+                    </span>
+                    {pts > 0 && <span className="text-xs text-yellow-500">{pts}pt</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Individual Awards */}
+      {indAwards.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Individual Awards</span>
+            <span className="text-xs text-yellow-400 font-semibold">{indAwards.filter(a => a.correct).length} pts</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            {indAwards.map(a => {
+              const meta = ALL_AWARD_META[a.award_key];
+              return (
+                <div key={a.award_key} className={`flex items-center gap-2 rounded px-2 py-1.5 text-xs ${
+                  a.correct ? "bg-green-950/40 text-green-300" :
+                  a.actual  ? "bg-red-950/20 text-red-300" :
+                              "bg-gray-800/50 text-gray-400"
+                }`}>
+                  <span className="shrink-0">{meta?.icon ?? "🏅"}</span>
+                  <span className="text-gray-500 shrink-0">{meta?.label ?? a.award_key}:</span>
+                  <span className="font-medium truncate">{a.predicted}</span>
+                  {a.correct && <span className="ml-auto shrink-0">✓</span>}
+                  {!a.correct && a.actual && <span className="ml-auto shrink-0 text-gray-500 truncate">→ {a.actual}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Team of the Tournament */}
+      {teamAwards.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Team of the Tournament</span>
+            <span className="text-xs text-yellow-400 font-semibold">{teamAwards.filter(a => a.correct).length} pts</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+            {teamAwards.map(a => {
+              const meta = ALL_AWARD_META[a.award_key];
+              return (
+                <div key={a.award_key} className={`flex flex-col rounded px-2 py-1.5 text-xs ${
+                  a.correct ? "bg-green-950/40 text-green-300" :
+                  a.actual  ? "bg-red-950/20 text-red-300" :
+                              "bg-gray-800/50 text-gray-400"
+                }`}>
+                  <span className="text-gray-600 text-xs">{meta?.label ?? a.award_key}</span>
+                  <span className="font-medium truncate">{a.predicted}</span>
+                  {!a.correct && a.actual && <span className="text-gray-600 truncate">→ {a.actual}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {data.groups.length === 0 && data.knockout.length === 0 && data.awards.length === 0 && (
+        <p className="text-gray-600 text-xs italic">No predictions made yet.</p>
+      )}
+    </div>
+  );
+}
+
 export default function LeaderboardPage() {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [me, setMe] = useState<string | null>(null);
+  const [rows, setRows]         = useState<Row[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [me, setMe]             = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [breakdowns, setBreakdowns] = useState<Record<string, Breakdown>>({});
+  const [fetching, setFetching] = useState<string | null>(null);
 
   useEffect(() => {
     setMe(localStorage.getItem("wc2026_player"));
@@ -55,9 +226,18 @@ export default function LeaderboardPage() {
     });
   }, []);
 
+  async function toggleExpanded(name: string) {
+    if (expanded === name) { setExpanded(null); return; }
+    setExpanded(name);
+    if (breakdowns[name]) return;
+    setFetching(name);
+    const data = await fetch(`/api/leaderboard/breakdown?player=${encodeURIComponent(name)}`).then(r => r.json());
+    setBreakdowns(prev => ({ ...prev, [name]: data }));
+    setFetching(null);
+  }
+
   const maxPoints = rows.length > 0 ? rows[0].total : 0;
 
-  // Shared rank: players tied on the same total get the same rank number
   function rank(i: number): number {
     if (i === 0) return 1;
     return rows[i].total === rows[i - 1].total ? rank(i - 1) : i + 1;
@@ -66,7 +246,7 @@ export default function LeaderboardPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-1">Leaderboard</h1>
-      <p className="text-gray-400 text-sm mb-6">Updates live as results are entered</p>
+      <p className="text-gray-400 text-sm mb-6">Click a player to see their points breakdown</p>
 
       {loading ? (
         <p className="text-gray-500">Loading…</p>
@@ -82,43 +262,63 @@ export default function LeaderboardPage() {
               r === 2 ? "text-gray-300" :
               r === 3 ? "text-amber-600" :
                         "text-gray-600";
+            const isExpanded = expanded === row.player_name;
+            const isFetching = fetching === row.player_name;
 
             return (
               <div
                 key={row.player_name}
-                className={`rounded-lg border p-4 flex items-center gap-4 ${
+                className={`rounded-lg border transition-colors ${
                   isMe ? "border-yellow-600 bg-yellow-900/20" : "border-gray-800 bg-gray-900"
-                }`}
+                } ${isExpanded ? "ring-1 ring-gray-700" : ""}`}
               >
-                <div className={`text-2xl font-bold w-8 text-center shrink-0 ${rankColour}`}>
-                  {r}
-                </div>
+                <button
+                  onClick={() => toggleExpanded(row.player_name)}
+                  className="w-full flex items-center gap-4 p-4 text-left"
+                >
+                  <div className={`text-2xl font-bold w-8 text-center shrink-0 ${rankColour}`}>
+                    {r}
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">
-                    {row.player_name}
-                    {isMe && <span className="ml-2 text-yellow-400 text-sm">(you)</span>}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate">
+                      {row.player_name}
+                      {isMe && <span className="ml-2 text-yellow-400 text-sm">(you)</span>}
+                    </div>
+                    <div className="flex gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
+                      {row.groupPoints > 0    && <span>📊 {row.groupPoints} groups</span>}
+                      {row.awardPoints > 0    && <span>🏆 {row.awardPoints} awards</span>}
+                      {row.knockoutPoints > 0 && <span>🥊 {row.knockoutPoints} bracket</span>}
+                      {row.total === 0        && <span className="italic">no points yet</span>}
+                    </div>
+                    <div className="h-1.5 bg-gray-800 rounded-full mt-1.5 overflow-hidden">
+                      <div
+                        className="h-full bg-yellow-500 rounded-full transition-all"
+                        style={{ width: maxPoints > 0 ? `${(row.total / maxPoints) * 100}%` : "0%" }}
+                      />
+                    </div>
                   </div>
-                  <div className="flex gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
-                    {row.groupPoints > 0    && <span>📊 {row.groupPoints} groups</span>}
-                    {row.awardPoints > 0    && <span>🏆 {row.awardPoints} awards</span>}
-                    {row.knockoutPoints > 0 && <span>🥊 {row.knockoutPoints} bracket</span>}
-                    {row.total === 0        && <span className="italic">no points yet</span>}
-                  </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full mt-1.5 overflow-hidden">
-                    <div
-                      className="h-full bg-yellow-500 rounded-full transition-all"
-                      style={{ width: maxPoints > 0 ? `${(row.total / maxPoints) * 100}%` : "0%" }}
-                    />
-                  </div>
-                </div>
 
-                <div className="text-right shrink-0">
-                  <div className={`text-xl font-bold ${row.total > 0 ? "text-yellow-400" : "text-gray-600"}`}>
-                    {row.total}
+                  <div className="text-right shrink-0 flex items-center gap-2">
+                    <div>
+                      <div className={`text-xl font-bold ${row.total > 0 ? "text-yellow-400" : "text-gray-600"}`}>
+                        {row.total}
+                      </div>
+                      <div className="text-xs text-gray-500">pts</div>
+                    </div>
+                    <span className="text-gray-600 text-xs">{isExpanded ? "▲" : "▼"}</span>
                   </div>
-                  <div className="text-xs text-gray-500">pts</div>
-                </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="px-4 pb-4">
+                    {isFetching ? (
+                      <p className="text-gray-600 text-xs py-2">Loading breakdown…</p>
+                    ) : breakdowns[row.player_name] ? (
+                      <BreakdownPanel data={breakdowns[row.player_name]} />
+                    ) : null}
+                  </div>
+                )}
               </div>
             );
           })}

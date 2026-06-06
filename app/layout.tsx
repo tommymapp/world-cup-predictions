@@ -17,9 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex gap-6 items-center">
           <span className="font-bold text-yellow-400">⚽ WC2026</span>
           <Link href="/" className="text-gray-300 hover:text-white text-sm">Home</Link>
-          <Link href="/predict" className="text-gray-300 hover:text-white text-sm">Predict</Link>
-          <Link href="/awards" className="text-gray-300 hover:text-white text-sm">Awards</Link>
-          <Link href="/knockout" className="text-gray-300 hover:text-white text-sm">Bracket</Link>
+          <Link href="/predict/groups" className="text-gray-300 hover:text-white text-sm">Predict</Link>
           <Link href="/leaderboard" className="text-gray-300 hover:text-white text-sm">Leaderboard</Link>
           <Link href="/admin" className="ml-auto text-gray-600 hover:text-gray-400 text-sm">Admin</Link>
         </nav>

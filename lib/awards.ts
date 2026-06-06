@@ -3,6 +3,7 @@ export const INDIVIDUAL_AWARDS = [
   { key: 'golden_boot',       label: 'Golden Boot',       icon: '🥾', description: 'Top scorer' },
   { key: 'golden_glove',      label: 'Golden Glove',      icon: '🧤', description: 'Best goalkeeper' },
   { key: 'best_young_player', label: 'Best Young Player', icon: '⭐', description: 'Under-21 player of the tournament' },
+  { key: 'goal_of_tournament', label: 'Goal of the Tournament', icon: '🎯', description: 'Best goal of the tournament' },
 ];
 
 export const TEAM_POSITIONS = [

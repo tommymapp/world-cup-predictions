@@ -39,14 +39,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (homeTeam !== undefined || awayTeam !== undefined) {
-    await sql`
-      UPDATE knockout_matches
-      SET
-        home_team = COALESCE(${homeTeam ?? null}, home_team),
-        away_team = COALESCE(${awayTeam ?? null}, away_team)
-      WHERE id = ${matchId}
-    `;
+  if (homeTeam !== undefined && awayTeam !== undefined) {
+    await sql`UPDATE knockout_matches SET home_team = ${homeTeam ?? null}, away_team = ${awayTeam ?? null} WHERE id = ${matchId}`;
+  } else if (homeTeam !== undefined) {
+    await sql`UPDATE knockout_matches SET home_team = ${homeTeam ?? null} WHERE id = ${matchId}`;
+  } else if (awayTeam !== undefined) {
+    await sql`UPDATE knockout_matches SET away_team = ${awayTeam ?? null} WHERE id = ${matchId}`;
   }
 
   if (result !== undefined) {
