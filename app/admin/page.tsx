@@ -106,12 +106,14 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ secret, group, position, team }),
     });
-    setGroupResults(prev => {
-      const g = { ...(prev[group] ?? {}) };
-      if (!team) delete g[position];
-      else g[position] = team;
-      return { ...prev, [group]: g };
-    });
+    // Reload from DB so displayed state always matches — avoids duplicate team issues
+    const { results } = await fetch("/api/group-results").then(r => r.json());
+    const gr: GroupResults = {};
+    for (const row of results) {
+      if (!gr[row.group_name]) gr[row.group_name] = {};
+      gr[row.group_name][row.position] = row.team;
+    }
+    setGroupResults(gr);
     setStatus("Saved");
     setTimeout(() => setStatus(""), 2000);
     setSaving(false);
