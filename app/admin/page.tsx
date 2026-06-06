@@ -14,19 +14,52 @@ type Match = {
 export default function AdminPage() {
   const [secret, setSecret] = useState("");
   const [authed, setAuthed] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [dbWarning, setDbWarning] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
     const s = sessionStorage.getItem("wc_admin_secret");
-    if (s) { setSecret(s); setAuthed(true); }
+    if (s) { setSecret(s); doLogin(s); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function doLogin(s: string) {
+    setLoginLoading(true);
+    setLoginError("");
+    try {
+      const res = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: s }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(
+          res.status === 401 ? "Invalid secret." :
+          res.status === 503 ? `Cannot reach database: ${data.detail ?? data.error}` :
+          data.error ?? "Unknown error"
+        );
+        sessionStorage.removeItem("wc_admin_secret");
+      } else {
+        sessionStorage.setItem("wc_admin_secret", s);
+        if (!data.tablesExist) {
+          setDbWarning("Tables not found — click \"Init DB / Reseed\" to set up the database.");
+        }
+        setAuthed(true);
+      }
+    } catch {
+      setLoginError("Network error — could not reach the server.");
+    }
+    setLoginLoading(false);
+  }
 
   function login() {
     if (!secret.trim()) return;
-    sessionStorage.setItem("wc_admin_secret", secret);
-    setAuthed(true);
+    doLogin(secret);
   }
 
   useEffect(() => {
@@ -55,11 +88,13 @@ export default function AdminPage() {
     setStatus("Setting up database…");
     const res = await fetch("/api/setup", { method: "POST" });
     if (res.ok) {
-      setStatus("Database ready! Refresh matches.");
+      setStatus("Database ready!");
+      setDbWarning("");
       const updated = await fetch("/api/matches").then((r) => r.json());
       setMatches(updated);
     } else {
-      setStatus("Setup failed");
+      const err = await res.json().catch(() => ({}));
+      setStatus(`Setup failed: ${err.error ?? res.statusText}`);
     }
   }
 
@@ -74,16 +109,22 @@ export default function AdminPage() {
         <input
           type="password"
           value={secret}
-          onChange={(e) => setSecret(e.target.value)}
+          onChange={(e) => { setSecret(e.target.value); setLoginError(""); }}
           onKeyDown={(e) => e.key === "Enter" && login()}
           placeholder="Admin secret"
-          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mb-3 focus:outline-none focus:border-yellow-500"
+          className={`w-full bg-gray-800 border rounded px-3 py-2 text-sm mb-3 focus:outline-none ${
+            loginError ? "border-red-500 focus:border-red-400" : "border-gray-700 focus:border-yellow-500"
+          }`}
         />
+        {loginError && (
+          <p className="text-red-400 text-sm mb-3">{loginError}</p>
+        )}
         <button
           onClick={login}
-          className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-semibold py-2 rounded text-sm"
+          disabled={loginLoading || !secret.trim()}
+          className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black font-semibold py-2 rounded text-sm"
         >
-          Enter
+          {loginLoading ? "Checking…" : "Enter"}
         </button>
       </div>
     );
@@ -91,6 +132,11 @@ export default function AdminPage() {
 
   return (
     <div>
+      {dbWarning && (
+        <div className="mb-4 bg-yellow-900/40 border border-yellow-600 rounded-lg px-4 py-3 text-yellow-300 text-sm">
+          ⚠ {dbWarning}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Admin — Enter Results</h1>
         <div className="flex items-center gap-3">
