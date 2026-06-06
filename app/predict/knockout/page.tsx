@@ -213,8 +213,8 @@ function MatchCard({
   resolve: (slot: string) => string | null;
   onPick: (matchId: number, team: string) => void;
 }) {
-  const adminHome = cleanTeam(match.home_team);
-  const adminAway = cleanTeam(match.away_team);
+  const adminHome = match.result ? cleanTeam(match.home_team) : null;
+  const adminAway = match.result ? cleanTeam(match.away_team) : null;
 
   const expectedHome = adminHome ?? resolve(match.home_slot);
   const expectedAway = adminAway ?? resolve(match.away_slot);
