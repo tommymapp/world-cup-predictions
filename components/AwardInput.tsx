@@ -8,7 +8,6 @@ export function AwardInput({
   icon,
   description,
   value,
-  result,
   onSave,
 }: {
   awardKey: string;
@@ -16,7 +15,6 @@ export function AwardInput({
   icon?: string;
   description?: string;
   value: string;
-  result?: string;
   onSave: (key: string, val: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -34,15 +32,8 @@ export function AwardInput({
     timerRef.current = setTimeout(() => setState("idle"), 1500);
   }, [awardKey, value, onSave]);
 
-  const correct = result !== undefined && result !== "" && draft.trim().toLowerCase() === result.toLowerCase();
-  const wrong   = result !== undefined && result !== "" && draft.trim() !== "" && draft.trim().toLowerCase() !== result.toLowerCase();
-
   return (
-    <div className={`rounded-lg border p-3 ${
-      correct ? "border-green-600 bg-green-950/40" :
-      wrong   ? "border-red-800 bg-red-950/20"    :
-                "border-gray-800 bg-gray-900"
-    }`}>
+    <div className="rounded-lg border p-3 border-gray-800 bg-gray-900">
       <div className="flex items-center justify-between mb-1">
         <label className="text-sm font-medium text-gray-300">
           {icon && <span className="mr-1">{icon}</span>}
@@ -52,8 +43,6 @@ export function AwardInput({
         <span className="text-xs">
           {state === "saving" && <span className="text-gray-500">saving…</span>}
           {state === "saved"  && <span className="text-green-500">saved</span>}
-          {correct && <span className="text-green-400 font-semibold">✓</span>}
-          {wrong && result && <span className="text-red-400 ml-1">✗ {result}</span>}
         </span>
       </div>
       <input

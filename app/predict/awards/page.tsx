@@ -6,12 +6,10 @@ import { INDIVIDUAL_AWARDS, FORMATIONS, FORMATION_KEY, TEAM_GK_KEY, getFormation
 import { AwardInput } from "@/components/AwardInput";
 
 type Preds = Record<string, string>;
-type Results = Record<string, string>;
 
 export default function AwardsPage() {
-  const [player, setPlayer]   = useState<string | null>(null);
-  const [preds, setPreds]     = useState<Preds>({});
-  const [results, setResults] = useState<Results>({});
+  const [player, setPlayer] = useState<string | null>(null);
+  const [preds, setPreds]   = useState<Preds>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -19,17 +17,10 @@ export default function AwardsPage() {
     if (!name) { router.push("/"); return; }
     setPlayer(name);
 
-    Promise.all([
-      fetch(`/api/awards?player=${encodeURIComponent(name)}`).then((r) => r.json()),
-      fetch("/api/awards/results").then((r) => r.json()),
-    ]).then(([predRows, { results: resultRows }]) => {
+    fetch(`/api/awards?player=${encodeURIComponent(name)}`).then((r) => r.json()).then((predRows) => {
       const p: Preds = {};
       for (const row of predRows) p[row.award_key] = row.value;
       setPreds(p);
-
-      const r: Results = {};
-      for (const row of resultRows) r[row.award_key] = row.value;
-      setResults(r);
     });
   }, [router]);
 
@@ -79,7 +70,6 @@ export default function AwardsPage() {
               icon={award.icon}
               description={award.description}
               value={preds[award.key] ?? ""}
-              result={results[award.key]}
               onSave={handleSave}
             />
           ))}
@@ -126,7 +116,6 @@ export default function AwardsPage() {
                   awardKey={TEAM_GK_KEY}
                   label="GK"
                   value={preds[TEAM_GK_KEY] ?? ""}
-                  result={results[TEAM_GK_KEY]}
                   onSave={handleSave}
                 />
               </div>
@@ -145,7 +134,6 @@ export default function AwardsPage() {
                     awardKey={slot.key}
                     label={slot.label}
                     value={preds[slot.key] ?? ""}
-                    result={results[slot.key]}
                     onSave={handleSave}
                   />
                 ))}
