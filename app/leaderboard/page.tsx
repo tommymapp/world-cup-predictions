@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 
 type MatchRow = { player_name: string; points: string; predicted_played: string };
 type AwardScore = { player_name: string; award_points: string };
+type KoScore = { player_name: string; knockout_points: string };
 
 type CombinedRow = {
   player_name: string;
   matchPoints: number;
   awardPoints: number;
+  knockoutPoints: number;
   total: number;
   predicted_played: number;
 };
@@ -24,24 +26,31 @@ export default function LeaderboardPage() {
     Promise.all([
       fetch("/api/results").then((r) => r.json()),
       fetch("/api/awards/results").then((r) => r.json()),
-    ]).then(([matchRows, { scores }]: [MatchRow[], { scores: AwardScore[] }]) => {
+      fetch("/api/knockout/results").then((r) => r.json()),
+    ]).then(([matchRows, { scores: awardScores }, { scores: koScores }]: [MatchRow[], { scores: AwardScore[] }, { scores: KoScore[] }]) => {
       const awardMap: Record<string, number> = {};
-      for (const s of scores) awardMap[s.player_name] = parseInt(s.award_points);
+      for (const s of awardScores) awardMap[s.player_name] = parseInt(s.award_points);
+
+      const koMap: Record<string, number> = {};
+      for (const s of koScores) koMap[s.player_name] = parseInt(s.knockout_points);
 
       const allPlayers = new Set([
         ...matchRows.map((r) => r.player_name),
-        ...scores.map((s) => s.player_name),
+        ...awardScores.map((s) => s.player_name),
+        ...koScores.map((s) => s.player_name),
       ]);
 
       const combined: CombinedRow[] = [...allPlayers].map((name) => {
         const m = matchRows.find((r) => r.player_name === name);
         const matchPoints = m ? parseInt(m.points) : 0;
         const awardPoints = awardMap[name] ?? 0;
+        const knockoutPoints = koMap[name] ?? 0;
         return {
           player_name: name,
           matchPoints,
           awardPoints,
-          total: matchPoints + awardPoints,
+          knockoutPoints,
+          total: matchPoints + awardPoints + knockoutPoints,
           predicted_played: m ? parseInt(m.predicted_played) : 0,
         };
       });
@@ -87,9 +96,10 @@ export default function LeaderboardPage() {
                   <div className="font-semibold truncate">
                     {row.player_name} {isMe && <span className="text-yellow-400 text-sm">(you)</span>}
                   </div>
-                  <div className="flex gap-3 mt-0.5 text-xs text-gray-500">
-                    <span>⚽ {row.matchPoints} matches ({matchPct}%)</span>
-                    {row.awardPoints > 0 && <span>🏆 {row.awardPoints} awards</span>}
+                  <div className="flex gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
+                    <span>⚽ {row.matchPoints} ({matchPct}%)</span>
+                    {row.awardPoints > 0 && <span>🏆 {row.awardPoints}</span>}
+                    {row.knockoutPoints > 0 && <span>🥊 {row.knockoutPoints}</span>}
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full mt-1.5 overflow-hidden">
                     <div

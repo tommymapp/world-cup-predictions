@@ -71,4 +71,26 @@ export async function setupDb() {
       value TEXT NOT NULL
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS knockout_matches (
+      id SERIAL PRIMARY KEY,
+      match_number INTEGER UNIQUE NOT NULL,
+      round TEXT NOT NULL,
+      home_slot TEXT NOT NULL,
+      away_slot TEXT NOT NULL,
+      home_team TEXT,
+      away_team TEXT,
+      result TEXT CHECK (result IN ('home', 'away'))
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS knockout_predictions (
+      id SERIAL PRIMARY KEY,
+      player_name TEXT NOT NULL,
+      match_id INTEGER REFERENCES knockout_matches(id),
+      prediction TEXT NOT NULL CHECK (prediction IN ('home', 'away')),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(player_name, match_id)
+    )
+  `;
 }
