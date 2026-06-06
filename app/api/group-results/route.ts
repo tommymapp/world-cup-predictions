@@ -11,13 +11,24 @@ export async function GET() {
   `;
 
   const { rows: scores } = await sql`
-    SELECT gp.player_name, COUNT(*)::int AS group_points
+    SELECT gp.player_name,
+      SUM(
+        CASE WHEN gr_exact.team IS NOT NULL THEN 3 ELSE 0 END +
+        CASE WHEN gp.position IN (1, 2) AND gr_team.position IN (1, 2) THEN 1 ELSE 0 END
+      )::int AS group_points
     FROM group_predictions gp
-    JOIN group_results gr
-      ON gr.group_name = gp.group_name
-      AND gr.position  = gp.position
-      AND gr.team      = gp.team
+    LEFT JOIN group_results gr_exact
+      ON gr_exact.group_name = gp.group_name
+      AND gr_exact.position  = gp.position
+      AND gr_exact.team      = gp.team
+    LEFT JOIN group_results gr_team
+      ON gr_team.group_name = gp.group_name
+      AND gr_team.team      = gp.team
     GROUP BY gp.player_name
+    HAVING SUM(
+      CASE WHEN gr_exact.team IS NOT NULL THEN 3 ELSE 0 END +
+      CASE WHEN gp.position IN (1, 2) AND gr_team.position IN (1, 2) THEN 1 ELSE 0 END
+    ) > 0
   `;
 
   return NextResponse.json({ results, scores });

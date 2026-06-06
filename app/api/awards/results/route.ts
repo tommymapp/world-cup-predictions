@@ -8,10 +8,20 @@ export async function GET() {
   const { rows: results } = await sql`SELECT award_key, value FROM award_results`;
 
   const { rows: scores } = await sql`
-    SELECT ap.player_name, COUNT(*) AS award_points
+    SELECT ap.player_name,
+      SUM(CASE
+        WHEN lower(ar.value) = lower(ap.value) THEN
+          CASE WHEN ap.award_key IN ('golden_ball','golden_boot','golden_glove','best_young_player','goal_of_tournament') THEN 10 ELSE 5 END
+        ELSE 0
+      END)::int AS award_points
     FROM award_predictions ap
-    JOIN award_results ar ON ar.award_key = ap.award_key AND ar.value = ap.value
+    LEFT JOIN award_results ar ON ar.award_key = ap.award_key
     GROUP BY ap.player_name
+    HAVING SUM(CASE
+      WHEN lower(ar.value) = lower(ap.value) THEN
+        CASE WHEN ap.award_key IN ('golden_ball','golden_boot','golden_glove','best_young_player','goal_of_tournament') THEN 10 ELSE 5 END
+      ELSE 0
+    END) > 0
   `;
 
   return NextResponse.json({ results, scores });

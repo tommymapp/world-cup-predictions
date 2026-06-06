@@ -8,10 +8,14 @@ export async function GET(req: NextRequest) {
 
   const [{ rows: groupRows }, { rows: koRows }, { rows: awardRows }] = await Promise.all([
     sql`
-      SELECT gp.group_name, gp.position, gp.team AS predicted, gr.team AS actual
+      SELECT gp.group_name, gp.position, gp.team AS predicted,
+             gr_pos.team AS actual,
+             gr_team.position AS actual_team_position
       FROM group_predictions gp
-      LEFT JOIN group_results gr
-        ON gr.group_name = gp.group_name AND gr.position = gp.position
+      LEFT JOIN group_results gr_pos
+        ON gr_pos.group_name = gp.group_name AND gr_pos.position = gp.position
+      LEFT JOIN group_results gr_team
+        ON gr_team.group_name = gp.group_name AND gr_team.team = gp.team
       WHERE gp.player_name = ${player}
       ORDER BY gp.group_name, gp.position
     `,
@@ -36,15 +40,18 @@ export async function GET(req: NextRequest) {
   ]);
 
   // Group picks by group_name
-  const groupMap: Record<string, { position: number; predicted: string; actual: string | null; correct: boolean }[]> = {};
+  const groupMap: Record<string, { position: number; predicted: string; actual: string | null; correct: boolean; wentThrough: boolean }[]> = {};
   for (const r of groupRows) {
     const g = r.group_name as string;
     if (!groupMap[g]) groupMap[g] = [];
+    const predPos = r.position as number;
+    const actualTeamPos = r.actual_team_position as number | null;
     groupMap[g].push({
-      position: r.position as number,
+      position: predPos,
       predicted: r.predicted as string,
       actual: (r.actual as string | null) ?? null,
       correct: r.actual !== null && r.actual === r.predicted,
+      wentThrough: predPos <= 2 && actualTeamPos !== null && actualTeamPos <= 2,
     });
   }
   const groups = Object.entries(groupMap)

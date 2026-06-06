@@ -11,11 +11,11 @@ export const ROUND_LABELS: Record<Round, string> = {
 
 export const ROUND_POINTS: Record<Round, number> = {
   r32:   1,
-  r16:   2,
-  qf:    3,
-  sf:    4,
-  third: 4,
-  final: 5,
+  r16:   3,
+  qf:    5,
+  sf:    8,
+  third: 8,
+  final: 15,
 };
 
 export type KnockoutMatch = {

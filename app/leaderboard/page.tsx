@@ -17,7 +17,7 @@ type Row = {
   total: number;
 };
 
-type GroupPick = { position: number; predicted: string; actual: string | null; correct: boolean };
+type GroupPick = { position: number; predicted: string; actual: string | null; correct: boolean; wentThrough: boolean };
 type KoPick    = { match_number: number; round: string; predicted: string; actual_winner: string | null; settled: boolean; correct: boolean; points: number };
 type AwardPick = { award_key: string; predicted: string; actual: string | null; correct: boolean };
 type Breakdown = { groups: { group: string; picks: GroupPick[] }[]; knockout: KoPick[]; awards: AwardPick[] };
@@ -47,9 +47,11 @@ function BreakdownPanel({ data }: { data: Breakdown }) {
   const indAwards  = data.awards.filter(a => individualKeys.has(a.award_key));
   const teamAwards = data.awards.filter(a => !individualKeys.has(a.award_key));
 
-  const totalGroupPts  = data.groups.flatMap(g => g.picks).filter(p => p.correct).length;
+  const allGroupPicks  = data.groups.flatMap(g => g.picks);
+  const totalGroupPts  = allGroupPicks.filter(p => p.correct).length * 3 + allGroupPicks.filter(p => p.wentThrough).length;
   const totalKoPts     = data.knockout.filter(m => m.correct).reduce((s, m) => s + m.points, 0);
-  const totalAwardPts  = data.awards.filter(a => a.correct).length;
+  const totalAwardPts  = data.awards.filter(a => a.correct && individualKeys.has(a.award_key)).length * 10
+                       + data.awards.filter(a => a.correct && !individualKeys.has(a.award_key)).length * 5;
 
   return (
     <div className="mt-3 pt-3 border-t border-gray-800 space-y-5 text-sm">
@@ -196,34 +198,38 @@ function ScoringGuide() {
       {open && (
         <div className="px-4 pb-4 text-xs text-gray-400 space-y-4 border-t border-gray-800 pt-3">
           <div>
-            <p className="font-semibold text-gray-300 mb-1">Group stage — 1 pt each</p>
-            <p>Predict the finishing position of each team within their group. You earn 1 point for every team you place in the correct position (1st, 2nd, 3rd, or 4th).</p>
+            <p className="font-semibold text-gray-300 mb-1">Group stage</p>
+            <div className="space-y-0.5">
+              <div className="flex justify-between"><span>Correct finishing position</span><span className="text-yellow-400 font-semibold ml-2">3 pts</span></div>
+              <div className="flex justify-between"><span>Predicted to qualify (top 2) and they did</span><span className="text-yellow-400 font-semibold ml-2">1 pt</span></div>
+            </div>
+            <p className="mt-1 text-gray-500">Bonuses stack — correctly placing a top-2 team earns 4 pts total.</p>
           </div>
           <div>
             <p className="font-semibold text-gray-300 mb-1">Knockout stage — points per correct pick</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 mt-1">
               {([
                 ["Round of 32", 1],
-                ["Round of 16", 2],
-                ["Quarter-finals", 3],
-                ["Semi-finals", 4],
-                ["Third Place Play-off", 4],
-                ["Final", 5],
+                ["Round of 16", 3],
+                ["Quarter-finals", 5],
+                ["Semi-finals", 8],
+                ["Third Place Play-off", 8],
+                ["Final", 15],
               ] as [string, number][]).map(([label, pts]) => (
                 <div key={label} className="flex justify-between">
                   <span>{label}</span>
-                  <span className="text-yellow-400 font-semibold ml-2">{pts} pt{pts !== 1 ? "s" : ""}</span>
+                  <span className="text-yellow-400 font-semibold ml-2">{pts} pts</span>
                 </div>
               ))}
             </div>
           </div>
           <div>
-            <p className="font-semibold text-gray-300 mb-1">Individual awards — 1 pt each</p>
-            <p>Golden Boot, Golden Glove, Golden Ball, Goal of the Tournament. 1 point for each correct pick.</p>
+            <p className="font-semibold text-gray-300 mb-1">Individual awards — 10 pts each</p>
+            <p>Golden Ball, Golden Boot, Golden Glove, Best Young Player, Goal of the Tournament.</p>
           </div>
           <div>
-            <p className="font-semibold text-gray-300 mb-1">Team of the Tournament — 1 pt each</p>
-            <p>Pick the best GK, defenders, midfielders and forwards. 1 point per correct player.</p>
+            <p className="font-semibold text-gray-300 mb-1">Team of the Tournament — 5 pts each</p>
+            <p>Pick the best GK, defenders, midfielders and forwards. 5 points per correct player.</p>
           </div>
         </div>
       )}
