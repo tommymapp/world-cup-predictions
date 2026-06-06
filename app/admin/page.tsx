@@ -34,8 +34,8 @@ export default function AdminPage() {
   const [awardResults, setAwardResults] = useState<Record<string, string>>({});
   const [awardDrafts, setAwardDrafts] = useState<Record<string, string>>({});
   const [koMatches, setKoMatches] = useState<KOMatch[]>([]);
-  const [koTeamDrafts, setKoTeamDrafts] = useState<Record<number, { home: string; away: string }>>({});
   const [thirdAssignments, setThirdAssignments] = useState<Record<number, string>>({});
+  const [activeTab, setActiveTab] = useState<"groups" | "knockout" | "awards">("groups");
 
   useEffect(() => {
     const s = sessionStorage.getItem("wc_admin_secret");
@@ -90,9 +90,6 @@ export default function AdminPage() {
     });
     fetch("/api/knockout").then((r) => r.json()).then(({ matches: kms }) => {
       setKoMatches(kms);
-      const drafts: Record<number, { home: string; away: string }> = {};
-      for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
-      setKoTeamDrafts(drafts);
     });
     fetch("/api/awards/results").then((r) => r.json()).then(({ results }) => {
       const map: Record<string, string> = {};
@@ -134,22 +131,29 @@ export default function AdminPage() {
     if (res.ok) {
       setFetchLog(data.log ?? []);
       const { koTeamsSet, koResultsSet, groupPositionsSet } = data.summary ?? {};
-      setStatus(`Fetched: ${koTeamsSet ?? 0} team slots, ${koResultsSet ?? 0} results, ${groupPositionsSet ?? 0} group positions updated`);
+
+      // Auto-fill R32 slots from the freshly fetched group results
+      const fillRes = await fetch("/api/autofill-r32", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret, qualifyingGroups: [...qualifyingGroups] }),
+      });
+      const fillData = await fillRes.json();
+
+      setStatus(`Fetched: ${koTeamsSet ?? 0} team slots, ${koResultsSet ?? 0} results, ${groupPositionsSet ?? 0} group positions updated · ${fillData.filled ?? 0} R32 slots auto-filled`);
+
       // Reload knockout matches and group results
-      fetch("/api/knockout").then(r => r.json()).then(({ matches: kms }) => {
-        setKoMatches(kms);
-        const drafts: Record<number, { home: string; away: string }> = {};
-        for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
-        setKoTeamDrafts(drafts);
-      });
-      fetch("/api/group-results").then(r => r.json()).then(({ results }) => {
-        const gr: GroupResults = {};
-        for (const row of results) {
-          if (!gr[row.group_name]) gr[row.group_name] = {};
-          gr[row.group_name][row.position] = row.team;
-        }
-        setGroupResults(gr);
-      });
+      const [{ matches: kms }, { results: grRows }] = await Promise.all([
+        fetch("/api/knockout").then(r => r.json()),
+        fetch("/api/group-results").then(r => r.json()),
+      ]);
+      setKoMatches(kms);
+      const gr: GroupResults = {};
+      for (const row of grRows) {
+        if (!gr[row.group_name]) gr[row.group_name] = {};
+        gr[row.group_name][row.position] = row.team;
+      }
+      setGroupResults(gr);
     } else {
       setFetchLog([`Error: ${data.error}`]);
     }
@@ -166,22 +170,6 @@ export default function AdminPage() {
       const err = await res.json().catch(() => ({}));
       setStatus(`Setup failed: ${err.error ?? res.statusText}`);
     }
-  }
-
-  async function saveKoTeams(matchId: number) {
-    const draft = koTeamDrafts[matchId];
-    if (!draft) return;
-    await fetch("/api/knockout/results", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret, matchId, homeTeam: draft.home || null, awayTeam: draft.away || null }),
-    });
-    setKoMatches((prev) => prev.map((m) => m.id === matchId
-      ? { ...m, home_team: draft.home || null, away_team: draft.away || null }
-      : m
-    ));
-    setStatus("Teams saved");
-    setTimeout(() => setStatus(""), 2000);
   }
 
   async function saveKoResult(matchId: number, result: "home" | "away" | null) {
@@ -220,9 +208,6 @@ export default function AdminPage() {
         ));
         const { matches: kms } = await fetch("/api/knockout").then((r) => r.json());
         setKoMatches(kms);
-        const drafts: Record<number, { home: string; away: string }> = {};
-        for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
-        setKoTeamDrafts(drafts);
       }
     }
 
@@ -328,7 +313,22 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div className="mb-10">
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-xl p-1">
+        {([["groups", "Groups"], ["knockout", "Knockout"], ["awards", "Awards"]] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 text-center py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === tab ? "bg-yellow-500 text-black" : "text-gray-400 hover:text-white hover:bg-gray-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "awards" && <div className="mb-10">
         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Individual Awards</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
           {INDIVIDUAL_AWARDS.map((award) => (
@@ -336,22 +336,15 @@ export default function AdminPage() {
               <label className="block text-sm font-medium text-gray-300 mb-1">
                 {award.icon} {award.label}
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={awardDrafts[award.key] ?? ""}
-                  onChange={(e) => setAwardDrafts((p) => ({ ...p, [award.key]: e.target.value }))}
-                  onKeyDown={(e) => e.key === "Enter" && saveAward(award.key, awardDrafts[award.key] ?? "")}
-                  placeholder="Player name…"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-green-500"
-                />
-                <button
-                  onClick={() => saveAward(award.key, awardDrafts[award.key] ?? "")}
-                  className="bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm"
-                >
-                  Set
-                </button>
-              </div>
+              <input
+                type="text"
+                value={awardDrafts[award.key] ?? ""}
+                onChange={(e) => setAwardDrafts((p) => ({ ...p, [award.key]: e.target.value }))}
+                onBlur={() => saveAward(award.key, awardDrafts[award.key] ?? "")}
+                onKeyDown={(e) => e.key === "Enter" && saveAward(award.key, awardDrafts[award.key] ?? "")}
+                placeholder="Player name…"
+                className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-green-500"
+              />
               {awardResults[award.key] && (
                 <p className="text-xs text-green-400 mt-1">Current: {awardResults[award.key]}</p>
               )}
@@ -383,39 +376,12 @@ export default function AdminPage() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
-      <div className="mb-10">
-        <div className="flex items-center justify-between mt-6 mb-3">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500">Knockout Bracket</h2>
-          <button
-            onClick={async () => {
-              setSaving(true);
-              setStatus("Auto-filling R32…");
-              const res = await fetch("/api/autofill-r32", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ secret, qualifyingGroups: [...qualifyingGroups] }),
-              });
-              const data = await res.json();
-              setStatus(`Auto-fill done: ${data.filled ?? 0} slots filled`);
-              // Reload knockout matches
-              const { matches: kms } = await fetch("/api/knockout").then(r => r.json());
-              setKoMatches(kms);
-              const drafts: Record<number, { home: string; away: string }> = {};
-              for (const m of kms) drafts[m.id] = { home: m.home_team ?? "", away: m.away_team ?? "" };
-              setKoTeamDrafts(drafts);
-              setSaving(false);
-              setTimeout(() => setStatus(""), 3000);
-            }}
-            disabled={saving}
-            className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-sm font-medium"
-          >
-            Auto-fill R32 from group results
-          </button>
-        </div>
+      {activeTab === "knockout" && <div className="mb-10">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3 mt-6">Knockout Bracket</h2>
         <p className="text-gray-600 text-xs mb-4">
-          Auto-fill resolves 1st/2nd/3rd place slots from group results. Select 8 qualifying groups below first to include 3rd-place slots.
+          R32 slots are auto-filled when you click Fetch Latest. Select 3rd-place qualifiers below to include 3rd-place slots.
         </p>
 
         {/* Third-place qualifier selector */}
@@ -484,64 +450,42 @@ export default function AdminPage() {
             <div key={round} className="mb-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-600 mb-2">{ROUND_LABELS[round]}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {rms.map((m) => {
-                  const draft = koTeamDrafts[m.id] ?? { home: "", away: "" };
-                  return (
-                    <div key={m.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                      <div className="text-xs text-gray-600 mb-2">
-                        M{m.match_number} · {slotLabel(m.home_slot)} vs {slotLabel(m.away_slot)}
-                      </div>
-                      <div className="flex gap-2 mb-2">
-                        <input
-                          type="text"
-                          placeholder={slotLabel(m.home_slot)}
-                          value={draft.home}
-                          onChange={(e) => setKoTeamDrafts((p) => ({ ...p, [m.id]: { ...draft, home: e.target.value } }))}
-                          className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-yellow-500"
-                        />
-                        <input
-                          type="text"
-                          placeholder={slotLabel(m.away_slot)}
-                          value={draft.away}
-                          onChange={(e) => setKoTeamDrafts((p) => ({ ...p, [m.id]: { ...draft, away: e.target.value } }))}
-                          className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-yellow-500"
-                        />
-                        <button
-                          onClick={() => saveKoTeams(m.id)}
-                          className="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1.5 rounded text-sm"
-                        >Set</button>
-                      </div>
-                      {m.home_team && m.away_team && (
-                        <div className="flex gap-1">
-                          {(["home", "away", null] as const).map((opt) => {
-                            const label = opt === "home" ? m.home_team! : opt === "away" ? m.away_team! : "Clear";
-                            const selected = m.result === opt && opt !== null;
-                            return (
-                              <button
-                                key={String(opt)}
-                                onClick={() => saveKoResult(m.id, opt)}
-                                className={`flex-1 py-1.5 px-1 rounded text-xs font-medium truncate transition-colors ${
-                                  opt === null
-                                    ? "bg-gray-800 text-gray-600 hover:text-gray-400"
-                                    : selected
-                                      ? "bg-green-600 text-white"
-                                      : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                                }`}
-                              >{label}</button>
-                            );
-                          })}
-                        </div>
-                      )}
+                {rms.map((m) => (
+                  <div key={m.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                    <div className="text-xs text-gray-600 mb-2">
+                      M{m.match_number} · {slotLabel(m.home_slot)} vs {slotLabel(m.away_slot)}
                     </div>
-                  );
-                })}
+                    <div className="flex gap-1">
+                      {(["home", "away"] as const).map((opt) => {
+                        const team = opt === "home" ? m.home_team : m.away_team;
+                        const label = team ?? slotLabel(opt === "home" ? m.home_slot : m.away_slot);
+                        const selected = m.result === opt;
+                        return (
+                          <button
+                            key={opt}
+                            disabled={!team}
+                            onClick={() => saveKoResult(m.id, selected ? null : opt)}
+                            className={`flex-1 py-1.5 px-1 rounded text-xs font-medium truncate transition-colors ${
+                              !team
+                                ? "bg-gray-800 text-gray-700 cursor-not-allowed"
+                                : selected
+                                  ? "bg-green-600 text-white"
+                                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                            }`}
+                          >{label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           );
         })}
-      </div>
+      </div>}
 
-      <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3 mt-6">Group Stage Results</h2>
+      {activeTab === "groups" && <div>
+      <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Group Stage Results</h2>
       <p className="text-gray-600 text-xs mb-4">Enter the final standings for each group once all matches are played.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {GROUP_NAMES.map(group => {
@@ -576,6 +520,7 @@ export default function AdminPage() {
           );
         })}
       </div>
+      </div>}
     </div>
   );
 }
