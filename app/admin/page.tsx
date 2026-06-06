@@ -7,6 +7,8 @@ import { GROUPS, GROUP_NAMES } from "@/lib/groups";
 import { THIRD_PLACE_MATCH_ORDER } from "@/lib/third-place";
 import { AwardInput } from "@/components/AwardInput";
 
+type GroupResults = Record<string, Record<number, string>>;
+
 type KOMatch = {
   id: number;
   match_number: number;
