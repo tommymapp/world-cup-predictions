@@ -55,4 +55,20 @@ export async function setupDb() {
       UNIQUE(player_name, match_id)
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS award_predictions (
+      id SERIAL PRIMARY KEY,
+      player_name TEXT NOT NULL,
+      award_key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(player_name, award_key)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS award_results (
+      award_key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `;
 }

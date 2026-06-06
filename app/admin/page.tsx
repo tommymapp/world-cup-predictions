@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
 
 type Match = {
   id: number;
@@ -20,6 +21,8 @@ export default function AdminPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
   const [status, setStatus] = useState("");
+  const [awardResults, setAwardResults] = useState<Record<string, string>>({});
+  const [awardDrafts, setAwardDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const s = sessionStorage.getItem("wc_admin_secret");
@@ -63,7 +66,14 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    if (authed) fetch("/api/matches").then((r) => r.json()).then(setMatches);
+    if (!authed) return;
+    fetch("/api/matches").then((r) => r.json()).then(setMatches);
+    fetch("/api/awards/results").then((r) => r.json()).then(({ results }) => {
+      const map: Record<string, string> = {};
+      for (const row of results) map[row.award_key] = row.value;
+      setAwardResults(map);
+      setAwardDrafts(map);
+    });
   }, [authed]);
 
   async function setResult(matchId: number, result: "home" | "draw" | "away" | null) {
@@ -95,6 +105,19 @@ export default function AdminPage() {
     } else {
       const err = await res.json().catch(() => ({}));
       setStatus(`Setup failed: ${err.error ?? res.statusText}`);
+    }
+  }
+
+  async function saveAward(awardKey: string, value: string) {
+    const res = await fetch("/api/awards/results", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret, awardKey, value }),
+    });
+    if (res.ok) {
+      setAwardResults((prev) => ({ ...prev, [awardKey]: value }));
+      setStatus("Saved");
+      setTimeout(() => setStatus(""), 2000);
     }
   }
 
@@ -150,6 +173,64 @@ export default function AdminPage() {
         </div>
       </div>
 
+      <div className="mb-10">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Individual Awards</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          {INDIVIDUAL_AWARDS.map((award) => (
+            <div key={award.key} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                {award.icon} {award.label}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={awardDrafts[award.key] ?? ""}
+                  onChange={(e) => setAwardDrafts((p) => ({ ...p, [award.key]: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && saveAward(award.key, awardDrafts[award.key] ?? "")}
+                  placeholder="Player name…"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-green-500"
+                />
+                <button
+                  onClick={() => saveAward(award.key, awardDrafts[award.key] ?? "")}
+                  className="bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded text-sm"
+                >
+                  Set
+                </button>
+              </div>
+              {awardResults[award.key] && (
+                <p className="text-xs text-green-400 mt-1">Current: {awardResults[award.key]}</p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Team of the Tournament</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[{ key: "team_gk", label: "GK" }, ...TEAM_POSITIONS.filter((p) => p.key !== "team_gk")].map((pos) => (
+            <div key={pos.key} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <label className="block text-xs font-bold text-gray-500 mb-1">{pos.label}</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={awardDrafts[pos.key] ?? ""}
+                  onChange={(e) => setAwardDrafts((p) => ({ ...p, [pos.key]: e.target.value }))}
+                  onKeyDown={(e) => e.key === "Enter" && saveAward(pos.key, awardDrafts[pos.key] ?? "")}
+                  placeholder="Player…"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-green-500"
+                />
+                <button
+                  onClick={() => saveAward(pos.key, awardDrafts[pos.key] ?? "")}
+                  className="bg-green-700 hover:bg-green-600 text-white px-2 py-1.5 rounded text-sm"
+                >
+                  ✓
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3 mt-6">Match Results</h2>
       {groups.map((group) => (
         <div key={group} className="mb-8">
           <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Group {group}</h2>
