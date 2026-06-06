@@ -6,7 +6,6 @@ import { GROUPS, GROUP_NAMES } from "@/lib/groups";
 
 // player_name → group → position → team
 type GroupPreds = Record<string, Record<number, string>>;
-type GroupResults = Record<string, Record<number, string>>;
 
 const POSITIONS = [1, 2, 3, 4] as const;
 const POS_LABEL: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
@@ -20,7 +19,6 @@ const POS_COLOUR: Record<number, string> = {
 export default function PredictPage() {
   const [player, setPlayer] = useState<string | null>(null);
   const [preds, setPreds] = useState<GroupPreds>({});
-  const [results, setResults] = useState<GroupResults>({});
   const [activeGroup, setActiveGroup] = useState<string>(GROUP_NAMES[0]);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
@@ -30,23 +28,13 @@ export default function PredictPage() {
     if (!name) { router.push("/"); return; }
     setPlayer(name);
 
-    Promise.all([
-      fetch(`/api/group-predictions?player=${encodeURIComponent(name)}`).then(r => r.json()),
-      fetch("/api/group-results").then(r => r.json()),
-    ]).then(([predRows, { results: resultRows }]) => {
+    fetch(`/api/group-predictions?player=${encodeURIComponent(name)}`).then(r => r.json()).then(predRows => {
       const p: GroupPreds = {};
       for (const row of predRows) {
         if (!p[row.group_name]) p[row.group_name] = {};
         p[row.group_name][row.position] = row.team;
       }
       setPreds(p);
-
-      const r: GroupResults = {};
-      for (const row of resultRows) {
-        if (!r[row.group_name]) r[row.group_name] = {};
-        r[row.group_name][row.position] = row.team;
-      }
-      setResults(r);
     });
   }, [router]);
 
@@ -72,24 +60,18 @@ export default function PredictPage() {
     setSaving(false);
   }, [player]);
 
-  function groupStats(group: string) {
+  function groupFilled(group: string) {
     const g = preds[group] ?? {};
-    const r = results[group] ?? {};
-    const filled = POSITIONS.filter(p => g[p]).length;
-    const correct = POSITIONS.filter(p => g[p] && r[p] && g[p] === r[p]).length;
-    const played = Object.keys(r).length;
-    return { filled, correct, played };
+    return POSITIONS.filter(p => g[p]).length;
   }
 
-  const totalFilled = GROUP_NAMES.reduce((acc, g) => acc + groupStats(g).filled, 0);
+  const totalFilled = GROUP_NAMES.reduce((acc, g) => acc + groupFilled(g), 0);
   const totalPossible = GROUP_NAMES.length * 4;
 
   if (!player) return null;
 
   const groupTeams = GROUPS[activeGroup] ?? [];
   const groupPreds = preds[activeGroup] ?? {};
-  const groupResults = results[activeGroup] ?? {};
-  const hasResults = Object.keys(groupResults).length > 0;
 
   return (
     <div>
@@ -111,7 +93,7 @@ export default function PredictPage() {
       {/* Group tab grid */}
       <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5 mb-6">
         {GROUP_NAMES.map(group => {
-          const { filled, correct, played } = groupStats(group);
+          const filled = groupFilled(group);
           const active = group === activeGroup;
           const complete = filled === 4;
           return (
@@ -128,11 +110,6 @@ export default function PredictPage() {
             >
               <span className="text-sm font-bold">{group}</span>
               <span className="text-xs text-gray-600">{filled}/4</span>
-              {played > 0 && (
-                <span className={`text-xs font-bold ${correct > 0 ? "text-green-400" : "text-gray-600"}`}>
-                  {correct}pt
-                </span>
-              )}
             </button>
           );
         })}
@@ -144,11 +121,6 @@ export default function PredictPage() {
           <h2 className="text-xl font-bold">Group {activeGroup}</h2>
           <div className="flex items-center gap-3 text-sm text-gray-500">
             {saving && <span>saving…</span>}
-            {hasResults && (
-              <span className="text-green-400">
-                {groupStats(activeGroup).correct}/4 correct
-              </span>
-            )}
           </div>
         </div>
 
@@ -156,26 +128,12 @@ export default function PredictPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
           {POSITIONS.map(pos => {
             const picked = groupPreds[pos];
-            const actual = groupResults[pos];
-            const correct = hasResults && picked && picked === actual;
-            const wrong = hasResults && picked && actual && picked !== actual;
 
             return (
-              <div
-                key={pos}
-                className={`rounded-lg border p-3 ${
-                  correct ? "border-green-600 bg-green-950/40" :
-                  wrong   ? "border-red-800 bg-red-950/20" :
-                            "border-gray-800 bg-gray-900"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
+              <div key={pos} className="rounded-lg border p-3 border-gray-800 bg-gray-900">
+                <div className="mb-2">
                   <span className={`text-sm font-bold ${POS_COLOUR[pos]}`}>
                     {POS_LABEL[pos]}
-                  </span>
-                  <span className="text-xs">
-                    {correct && <span className="text-green-400 font-semibold">+1 ✓</span>}
-                    {wrong && actual && <span className="text-red-400">✗ {actual}</span>}
                   </span>
                 </div>
 
@@ -185,7 +143,6 @@ export default function PredictPage() {
                     const isSelected = picked === team;
                     const teamPos = Object.entries(groupPreds).find(([, t]) => t === team)?.[0];
                     const takenElsewhere = teamPos !== undefined && Number(teamPos) !== pos;
-                    const actualForPos = groupResults[pos];
 
                     return (
                       <button
@@ -193,18 +150,14 @@ export default function PredictPage() {
                         onClick={() => pick(activeGroup, pos, team)}
                         className={`py-1.5 px-2 rounded text-xs font-medium truncate transition-colors text-left ${
                           isSelected
-                            ? hasResults
-                              ? correct ? "bg-green-700 text-white" : "bg-red-900/50 text-red-300"
-                              : "bg-yellow-500 text-black ring-2 ring-yellow-300"
-                            : hasResults && team === actualForPos
-                              ? "bg-green-900/30 text-green-500 border border-green-800 hover:bg-green-900/50"
-                              : takenElsewhere
-                                ? "bg-gray-800 text-gray-500 border border-dashed border-gray-700 hover:bg-gray-700"
-                                : "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                            ? "bg-yellow-500 text-black ring-2 ring-yellow-300"
+                            : takenElsewhere
+                              ? "bg-gray-800 text-gray-500 border border-dashed border-gray-700 hover:bg-gray-700"
+                              : "bg-gray-800 text-gray-200 hover:bg-gray-700"
                         }`}
                       >
                         {team}
-                        {takenElsewhere && !hasResults && (
+                        {takenElsewhere && (
                           <span className="ml-1 text-gray-600">{POS_LABEL[Number(teamPos)]}</span>
                         )}
                       </button>
