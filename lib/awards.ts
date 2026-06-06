@@ -20,7 +20,16 @@ export const TEAM_POSITIONS = [
   { key: 'team_lw',  label: 'LW' },
 ];
 
+export const FORMATIONS = [
+  "4-4-2", "4-3-3", "4-2-3-1", "4-5-1",
+  "3-5-2", "3-4-3", "5-3-2", "5-4-1",
+  "4-1-4-1", "4-3-2-1", "4-2-2-2", "3-4-2-1",
+];
+
+export const FORMATION_KEY = "team_formation";
+
 export const ALL_AWARD_KEYS = [
   ...INDIVIDUAL_AWARDS.map((a) => a.key),
   ...TEAM_POSITIONS.map((p) => p.key),
+  FORMATION_KEY,
 ];

@@ -16,6 +16,7 @@ export async function GET() {
       END)::int AS award_points
     FROM award_predictions ap
     LEFT JOIN award_results ar ON ar.award_key = ap.award_key
+    WHERE ap.award_key != 'team_formation'
     GROUP BY ap.player_name
     HAVING SUM(CASE
       WHEN lower(ar.value) = lower(ap.value) THEN

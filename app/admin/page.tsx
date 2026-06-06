@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
+import { INDIVIDUAL_AWARDS, TEAM_POSITIONS, FORMATIONS, FORMATION_KEY } from "@/lib/awards";
 import { ROUND_LABELS, slotLabel, type Round } from "@/lib/knockout";
 import { GROUPS, GROUP_NAMES } from "@/lib/groups";
 import { THIRD_PLACE_MATCH_ORDER } from "@/lib/third-place";
@@ -356,6 +356,33 @@ export default function AdminPage() {
         </div>
 
         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Team of the Tournament</h2>
+
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-2">Formation</p>
+          <div className="flex flex-wrap gap-2">
+            {FORMATIONS.map((f) => {
+              const selected = awardResults[FORMATION_KEY] === f;
+              return (
+                <button
+                  key={f}
+                  onClick={() => {
+                    const next = selected ? "" : f;
+                    setAwardDrafts((p) => ({ ...p, [FORMATION_KEY]: next }));
+                    saveAward(FORMATION_KEY, next);
+                  }}
+                  className={`px-3 py-1.5 rounded text-sm font-mono font-medium border transition-colors ${
+                    selected
+                      ? "bg-yellow-500 border-yellow-400 text-gray-900"
+                      : "bg-gray-900 border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400"
+                  }`}
+                >
+                  {f}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[{ key: "team_gk", label: "GK" }, ...TEAM_POSITIONS.filter((p) => p.key !== "team_gk")].map((pos) => (
             <div key={pos.key} className="bg-gray-900 border border-gray-800 rounded-lg p-3">

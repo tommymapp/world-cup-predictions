@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
+import { INDIVIDUAL_AWARDS, TEAM_POSITIONS, FORMATIONS, FORMATION_KEY } from "@/lib/awards";
 
 type Preds = Record<string, string>;
 type Results = Record<string, string>;
@@ -105,8 +105,9 @@ export default function AwardsPage() {
     });
   }, [player]);
 
-  const totalPossible = INDIVIDUAL_AWARDS.length + TEAM_POSITIONS.length;
-  const filled = [...INDIVIDUAL_AWARDS, ...TEAM_POSITIONS].filter((a) => preds[a.key]?.trim()).length;
+  const totalPossible = INDIVIDUAL_AWARDS.length + TEAM_POSITIONS.length + 1;
+  const filled = [...INDIVIDUAL_AWARDS, ...TEAM_POSITIONS].filter((a) => preds[a.key]?.trim()).length
+               + (preds[FORMATION_KEY] ? 1 : 0);
 
   if (!player) return null;
 
@@ -143,6 +144,29 @@ export default function AwardsPage() {
 
       <section>
         <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Team of the Tournament</h2>
+
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-2">Formation</p>
+          <div className="flex flex-wrap gap-2">
+            {FORMATIONS.map((f) => {
+              const selected = preds[FORMATION_KEY] === f;
+              return (
+                <button
+                  key={f}
+                  onClick={() => handleSave(FORMATION_KEY, selected ? "" : f)}
+                  className={`px-3 py-1.5 rounded text-sm font-mono font-medium border transition-colors ${
+                    selected
+                      ? "bg-yellow-500 border-yellow-400 text-gray-900"
+                      : "bg-gray-900 border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-400"
+                  }`}
+                >
+                  {f}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <div className="space-y-3">
             <div className="flex justify-center">
