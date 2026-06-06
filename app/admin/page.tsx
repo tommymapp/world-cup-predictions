@@ -3,15 +3,9 @@
 import { useEffect, useState } from "react";
 import { INDIVIDUAL_AWARDS, TEAM_POSITIONS } from "@/lib/awards";
 import { ROUND_LABELS, slotLabel, type Round } from "@/lib/knockout";
+import { GROUPS, GROUP_NAMES } from "@/lib/groups";
 
-type Match = {
-  id: number;
-  group_name: string;
-  home_team: string;
-  away_team: string;
-  match_date: string;
-  result: "home" | "draw" | "away" | null;
-};
+type GroupResults = Record<string, Record<number, string>>; // group → position → team
 
 type KOMatch = {
   id: number;
@@ -30,9 +24,9 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [dbWarning, setDbWarning] = useState("");
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [saving, setSaving] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const [groupResults, setGroupResults] = useState<GroupResults>({});
   const [awardResults, setAwardResults] = useState<Record<string, string>>({});
   const [awardDrafts, setAwardDrafts] = useState<Record<string, string>>({});
   const [koMatches, setKoMatches] = useState<KOMatch[]>([]);
@@ -81,7 +75,14 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!authed) return;
-    fetch("/api/matches").then((r) => r.json()).then(setMatches);
+    fetch("/api/group-results").then((r) => r.json()).then(({ results }) => {
+      const gr: GroupResults = {};
+      for (const row of results) {
+        if (!gr[row.group_name]) gr[row.group_name] = {};
+        gr[row.group_name][row.position] = row.team;
+      }
+      setGroupResults(gr);
+    });
     fetch("/api/knockout").then((r) => r.json()).then(({ matches: kms }) => {
       setKoMatches(kms);
       const drafts: Record<number, { home: string; away: string }> = {};
@@ -96,22 +97,22 @@ export default function AdminPage() {
     });
   }, [authed]);
 
-  async function setResult(matchId: number, result: "home" | "draw" | "away" | null) {
-    setSaving(matchId);
-    const res = await fetch("/api/results", {
+  async function setGroupResult(group: string, position: number, team: string | null) {
+    setSaving(true);
+    await fetch("/api/group-results", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret, matchId, result }),
+      body: JSON.stringify({ secret, group, position, team }),
     });
-    if (res.ok) {
-      setMatches((prev) => prev.map((m) => m.id === matchId ? { ...m, result } : m));
-      setStatus("Saved");
-      setTimeout(() => setStatus(""), 2000);
-    } else {
-      const err = await res.json();
-      setStatus(err.error || "Error");
-    }
-    setSaving(null);
+    setGroupResults(prev => {
+      const g = { ...(prev[group] ?? {}) };
+      if (!team) delete g[position];
+      else g[position] = team;
+      return { ...prev, [group]: g };
+    });
+    setStatus("Saved");
+    setTimeout(() => setStatus(""), 2000);
+    setSaving(false);
   }
 
   async function runSetup() {
@@ -120,8 +121,6 @@ export default function AdminPage() {
     if (res.ok) {
       setStatus("Database ready!");
       setDbWarning("");
-      const updated = await fetch("/api/matches").then((r) => r.json());
-      setMatches(updated);
     } else {
       const err = await res.json().catch(() => ({}));
       setStatus(`Setup failed: ${err.error ?? res.statusText}`);
@@ -168,8 +167,6 @@ export default function AdminPage() {
     }
   }
 
-  const groups = [...new Set(matches.map((m) => m.group_name))].sort();
-  const now = new Date();
 
   if (!authed) {
     return (
@@ -346,45 +343,41 @@ export default function AdminPage() {
         })}
       </div>
 
-      <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3 mt-6">Match Results</h2>
-      {groups.map((group) => (
-        <div key={group} className="mb-8">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Group {group}</h2>
-          <div className="flex flex-col gap-2">
-            {matches.filter((m) => m.group_name === group).map((match) => {
-              const played = new Date(match.match_date) < now;
-              return (
-                <div key={match.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2 text-sm text-gray-400">
-                    <span>{new Date(match.match_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                    {!played && <span className="text-xs text-yellow-600">upcoming</span>}
-                  </div>
-                  <div className="flex gap-1">
-                    {(["home", "draw", "away"] as const).map((opt) => {
-                      const label = opt === "home" ? match.home_team : opt === "away" ? match.away_team : "Draw";
-                      const selected = match.result === opt;
-                      return (
-                        <button
-                          key={opt}
-                          disabled={saving === match.id}
-                          onClick={() => setResult(match.id, selected ? null : opt)}
-                          className={`flex-1 py-2 px-1 rounded text-sm font-medium truncate transition-colors ${
-                            selected
-                              ? "bg-green-600 text-white"
-                              : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+      <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3 mt-6">Group Stage Results</h2>
+      <p className="text-gray-600 text-xs mb-4">Enter the final standings for each group once all matches are played.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {GROUP_NAMES.map(group => {
+          const teams = GROUPS[group];
+          const gr = groupResults[group] ?? {};
+          return (
+            <div key={group} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+              <h3 className="text-sm font-bold text-gray-400 mb-3">Group {group}</h3>
+              <div className="flex flex-col gap-2">
+                {[1, 2, 3, 4].map(pos => {
+                  const posLabel = ["1st", "2nd", "3rd", "4th"][pos - 1];
+                  const posColour = ["text-yellow-400", "text-gray-300", "text-amber-600", "text-gray-600"][pos - 1];
+                  return (
+                    <div key={pos} className="flex items-center gap-2">
+                      <span className={`text-xs font-bold w-6 text-right shrink-0 ${posColour}`}>{posLabel}</span>
+                      <select
+                        value={gr[pos] ?? ""}
+                        disabled={saving}
+                        onChange={e => setGroupResult(group, pos, e.target.value || null)}
+                        className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-green-500"
+                      >
+                        <option value="">— pick team —</option>
+                        {teams.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
