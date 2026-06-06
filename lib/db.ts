@@ -1,4 +1,4 @@
-import { createPool } from '@vercel/postgres';
+import { Pool } from 'pg';
 
 const connectionString =
   process.env.POSTGRES_URL ||
@@ -6,8 +6,21 @@ const connectionString =
   process.env.STORAGE_POSTGRES_URL ||
   process.env.DATABASE_URL;
 
-const pool = createPool({ connectionString });
-export const sql = pool.sql.bind(pool);
+const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+
+// Tagged template literal helper — same API as @vercel/postgres
+export async function sql(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): Promise<{ rows: Record<string, unknown>[] }> {
+  let query = '';
+  strings.forEach((str, i) => {
+    query += str;
+    if (i < values.length) query += `$${i + 1}`;
+  });
+  const result = await pool.query(query, values as unknown[]);
+  return { rows: result.rows };
+}
 
 export async function setupDb() {
   await sql`
