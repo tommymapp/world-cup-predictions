@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       SELECT ap.award_key, ap.value AS predicted, ar.value AS actual
       FROM award_predictions ap
       LEFT JOIN award_results ar ON ar.award_key = ap.award_key
-      WHERE ap.player_name = ${player}
+      WHERE ap.player_name = ${player} AND ap.award_key != 'team_formation'
       ORDER BY ap.award_key
     `,
   ]);

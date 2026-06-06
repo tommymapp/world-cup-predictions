@@ -367,7 +367,7 @@ export default function AdminPage() {
                   key={f}
                   onClick={() => {
                     const next = selected ? "" : f;
-                    setAwardDrafts((p) => ({ ...p, [FORMATION_KEY]: next }));
+                    setAwardResults((p) => ({ ...p, [FORMATION_KEY]: next }));
                     saveAward(FORMATION_KEY, next);
                   }}
                   className={`px-3 py-1.5 rounded text-sm font-mono font-medium border transition-colors ${
