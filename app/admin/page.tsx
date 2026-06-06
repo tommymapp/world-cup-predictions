@@ -35,7 +35,9 @@ export default function AdminPage() {
   const [awardDrafts, setAwardDrafts] = useState<Record<string, string>>({});
   const [koMatches, setKoMatches] = useState<KOMatch[]>([]);
   const [thirdAssignments, setThirdAssignments] = useState<Record<number, string>>({});
-  const [activeTab, setActiveTab] = useState<"groups" | "knockout" | "awards">("groups");
+  const [activeTab, setActiveTab] = useState<"groups" | "knockout" | "awards" | "players">("groups");
+  const [players, setPlayers] = useState<string[]>([]);
+  const [confirmReset, setConfirmReset] = useState<string | null>(null);
 
   useEffect(() => {
     const s = sessionStorage.getItem("wc_admin_secret");
@@ -80,6 +82,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!authed) return;
+    fetch("/api/players").then((r) => r.json()).then((names: string[]) => setPlayers(names));
     fetch("/api/group-results").then((r) => r.json()).then(({ results }) => {
       const gr: GroupResults = {};
       for (const row of results) {
@@ -315,7 +318,7 @@ export default function AdminPage() {
 
       {/* Tab bar */}
       <div className="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-xl p-1">
-        {([["groups", "Groups"], ["knockout", "Knockout"], ["awards", "Awards"]] as const).map(([tab, label]) => (
+        {([["groups", "Groups"], ["knockout", "Knockout"], ["awards", "Awards"], ["players", "Players"]] as const).map(([tab, label]) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -521,6 +524,54 @@ export default function AdminPage() {
         })}
       </div>
       </div>}
+
+      {activeTab === "players" && (
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-3">Players</h2>
+          <p className="text-gray-600 text-xs mb-4">Reset clears all group, knockout and award predictions for a player. The player account itself is kept.</p>
+          <div className="flex flex-col gap-2">
+            {players.length === 0 && <p className="text-gray-600 text-sm italic">No players yet.</p>}
+            {players.map(name => (
+              <div key={name} className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+                <span className="text-sm font-medium">{name}</span>
+                {confirmReset === name ? (
+                  <div className="flex gap-2">
+                    <span className="text-xs text-red-400 self-center">Sure?</span>
+                    <button
+                      onClick={async () => {
+                        await fetch("/api/admin/reset-player", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ secret, player: name }),
+                        });
+                        setConfirmReset(null);
+                        setStatus(`Reset ${name}`);
+                        setTimeout(() => setStatus(""), 2000);
+                      }}
+                      className="bg-red-700 hover:bg-red-600 text-white px-3 py-1 rounded text-xs font-medium"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setConfirmReset(null)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmReset(name)}
+                    className="bg-gray-800 hover:bg-red-900/50 hover:border-red-800 border border-gray-700 text-gray-400 hover:text-red-300 px-3 py-1 rounded text-xs transition-colors"
+                  >
+                    Reset predictions
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
