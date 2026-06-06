@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ROUND_LABELS, ROUND_POINTS, type Round } from "@/lib/knockout";
+import { ROUND_POINTS } from "@/lib/knockout";
 import { INDIVIDUAL_AWARDS } from "@/lib/awards";
 import { GROUP_NAMES } from "@/lib/groups";
 
@@ -23,8 +23,6 @@ type AwardPick = { award_key: string; predicted: string; actual: string | null; 
 type Breakdown = { groups: { group: string; picks: GroupPick[] }[]; knockout: KoPick[]; awards: AwardPick[] };
 
 const POS_LABEL: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
-const ROUNDS: Round[] = ["r32", "r16", "qf", "sf", "third", "final"];
-
 const INDIVIDUAL_AWARD_META: Record<string, { label: string; icon: string }> =
   Object.fromEntries(INDIVIDUAL_AWARDS.map(a => [a.key, { label: a.label, icon: a.icon }]));
 
@@ -36,17 +34,117 @@ function teamKeyLabel(key: string): string {
   return `${tier} ${m[2]}`;
 }
 
+// ── Bracket view ─────────────────────────────────────────────────────────────
+
+const SLOT = 28;   // px — height of each R32 row
+const COL_W = 88;  // px — width of each round column
+const CONN_W = 10; // px — width of connector columns
+
+// Visual top-to-bottom order within each round (pairs must feed the same next-round match)
+const R32_ORDER = [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87];
+const R16_ORDER = [89, 90, 93, 94, 91, 92, 95, 96];
+const QF_ORDER  = [97, 98, 99, 100];
+const SF_ORDER  = [101, 102];
+
+function BracketChip({ pick, height }: { pick: KoPick | undefined; height: number }) {
+  const team = pick?.predicted;
+  const cls = pick?.correct
+    ? "bg-green-900/40 text-green-300 border-green-700"
+    : pick?.settled
+      ? "bg-red-900/20 text-red-400 border-red-900"
+      : team
+        ? "bg-gray-800 text-gray-100 border-gray-600"
+        : "border-dashed border-gray-800 text-gray-700";
+  return (
+    <div className="flex items-center px-1" style={{ height }}>
+      <div className={`w-full text-[11px] font-medium text-center truncate rounded border px-1.5 py-0.5 ${cls}`}>
+        {team ?? "—"}
+      </div>
+    </div>
+  );
+}
+
+function BracketConn({ count, itemH }: { count: number; itemH: number }) {
+  return (
+    <div className="shrink-0" style={{ width: CONN_W }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div
+          key={i}
+          className={`border-gray-700 border-r ${i % 2 === 0 ? "border-b" : "border-t"}`}
+          style={{ height: itemH }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BracketView({ picks }: { picks: KoPick[] }) {
+  const pm = new Map(picks.map(p => [p.match_number, p]));
+  const g = (n: number) => pm.get(n);
+
+  const headers: [string, number][] = [
+    ["R32", COL_W], ["", CONN_W], ["R16", COL_W], ["", CONN_W],
+    ["QF",  COL_W], ["", CONN_W], ["SF",  COL_W], ["", CONN_W],
+    ["🏆",  COL_W],
+  ];
+
+  return (
+    <div className="overflow-x-auto">
+      <div style={{ minWidth: "max-content" }}>
+        {/* Column headers */}
+        <div className="flex mb-1">
+          {headers.map(([label, w], i) => (
+            <div key={i} className="text-center text-[10px] uppercase tracking-widest text-gray-600 shrink-0" style={{ width: w }}>
+              {label}
+            </div>
+          ))}
+        </div>
+
+        {/* Bracket body */}
+        <div className="flex">
+          <div className="shrink-0" style={{ width: COL_W }}>
+            {R32_ORDER.map(n => <BracketChip key={n} pick={g(n)} height={SLOT} />)}
+          </div>
+          <BracketConn count={16} itemH={SLOT} />
+          <div className="shrink-0" style={{ width: COL_W }}>
+            {R16_ORDER.map(n => <BracketChip key={n} pick={g(n)} height={2 * SLOT} />)}
+          </div>
+          <BracketConn count={8} itemH={2 * SLOT} />
+          <div className="shrink-0" style={{ width: COL_W }}>
+            {QF_ORDER.map(n => <BracketChip key={n} pick={g(n)} height={4 * SLOT} />)}
+          </div>
+          <BracketConn count={4} itemH={4 * SLOT} />
+          <div className="shrink-0" style={{ width: COL_W }}>
+            {SF_ORDER.map(n => <BracketChip key={n} pick={g(n)} height={8 * SLOT} />)}
+          </div>
+          <BracketConn count={2} itemH={8 * SLOT} />
+          <div className="shrink-0" style={{ width: COL_W }}>
+            <BracketChip pick={g(104)} height={16 * SLOT} />
+          </div>
+        </div>
+
+        {/* Third-place play-off */}
+        <div className="mt-2 pt-2 border-t border-gray-800 flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-gray-600 shrink-0">3rd Place</span>
+          {g(103) ? (
+            <div className={`text-xs font-medium px-2 py-0.5 rounded border ${
+              g(103)?.correct ? "bg-green-900/40 text-green-300 border-green-700" :
+              g(103)?.settled ? "bg-red-900/20 text-red-400 border-red-900" :
+                                "bg-gray-800 text-gray-100 border-gray-600"
+            }`}>{g(103)!.predicted}</div>
+          ) : (
+            <span className="text-gray-700 italic text-xs">—</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BreakdownPanel({ data }: { data: Breakdown }) {
   // ── Group stage ──────────────────────────────────────────────────────────────
   const groupsByName: Record<string, GroupPick[]> = {};
   for (const g of data.groups) groupsByName[g.group] = g.picks;
-
-  // ── Knockout by round ────────────────────────────────────────────────────────
-  const koByRound: Record<string, KoPick[]> = {};
-  for (const m of data.knockout) {
-    if (!koByRound[m.round]) koByRound[m.round] = [];
-    koByRound[m.round].push(m);
-  }
 
   // ── Awards split ─────────────────────────────────────────────────────────────
   const individualKeys = new Set(INDIVIDUAL_AWARDS.map(a => a.key));
@@ -99,33 +197,14 @@ function BreakdownPanel({ data }: { data: Breakdown }) {
         </div>
       )}
 
-      {/* Knockout */}
+      {/* Knockout bracket */}
       {data.knockout.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Knockout</span>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Knockout Bracket</span>
             <span className="text-xs text-yellow-400 font-semibold">{totalKoPts} pts</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-            {ROUNDS.map(round => {
-              const picks = koByRound[round] ?? [];
-              if (picks.length === 0) return null;
-              const settled = picks.filter(m => m.settled);
-              const correct = picks.filter(m => m.correct);
-              const pts = correct.reduce((s, m) => s + m.points, 0);
-              return (
-                <div key={round} className="bg-gray-800/60 rounded px-2 py-1.5">
-                  <div className="text-xs text-gray-500 leading-tight">{ROUND_LABELS[round]}</div>
-                  <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className={`font-bold text-sm ${pts > 0 ? "text-green-400" : "text-gray-600"}`}>
-                      {settled.length > 0 ? `${correct.length}/${settled.length}` : `${picks.length}✎`}
-                    </span>
-                    {pts > 0 && <span className="text-xs text-yellow-500">{pts}pt</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <BracketView picks={data.knockout} />
         </div>
       )}
 
