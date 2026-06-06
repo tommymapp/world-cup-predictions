@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { ALL_TEAMS } from '@/lib/teams';
+
+const TEAM_SET = new Set(ALL_TEAMS);
 
 export async function GET(req: NextRequest) {
   const player = req.nextUrl.searchParams.get('player');
@@ -21,8 +24,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const { player, matchId, prediction } = await req.json();
-  if (!['home', 'away'].includes(prediction)) {
-    return NextResponse.json({ error: 'Invalid prediction' }, { status: 400 });
+  if (!prediction || !TEAM_SET.has(prediction)) {
+    return NextResponse.json({ error: 'Invalid team' }, { status: 400 });
   }
   await sql`
     INSERT INTO knockout_predictions (player_name, match_id, prediction)

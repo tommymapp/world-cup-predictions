@@ -6,19 +6,29 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET ?? 'changeme';
 
 export async function GET() {
   const { rows: scores } = await sql`
-    SELECT kp.player_name, SUM(pts.points) AS knockout_points
+    SELECT kp.player_name,
+           SUM(CASE
+             WHEN km.result = 'home' AND kp.prediction = km.home_team THEN pts.points
+             WHEN km.result = 'away' AND kp.prediction = km.away_team THEN pts.points
+             ELSE 0
+           END) AS knockout_points
     FROM knockout_predictions kp
     JOIN knockout_matches km ON km.id = kp.match_id
     JOIN (VALUES
-      ('r32',   ${ROUND_POINTS.r32}),
-      ('r16',   ${ROUND_POINTS.r16}),
-      ('qf',    ${ROUND_POINTS.qf}),
-      ('sf',    ${ROUND_POINTS.sf}),
-      ('third', ${ROUND_POINTS.third}),
-      ('final', ${ROUND_POINTS.final})
+      ('r32',   ${ROUND_POINTS.r32}::int),
+      ('r16',   ${ROUND_POINTS.r16}::int),
+      ('qf',    ${ROUND_POINTS.qf}::int),
+      ('sf',    ${ROUND_POINTS.sf}::int),
+      ('third', ${ROUND_POINTS.third}::int),
+      ('final', ${ROUND_POINTS.final}::int)
     ) AS pts(round, points) ON pts.round = km.round
-    WHERE km.result IS NOT NULL AND kp.prediction = km.result
+    WHERE km.result IS NOT NULL
     GROUP BY kp.player_name
+    HAVING SUM(CASE
+      WHEN km.result = 'home' AND kp.prediction = km.home_team THEN pts.points
+      WHEN km.result = 'away' AND kp.prediction = km.away_team THEN pts.points
+      ELSE 0
+    END) > 0
   `;
   return NextResponse.json({ scores });
 }

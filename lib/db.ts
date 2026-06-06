@@ -83,12 +83,16 @@ export async function setupDb() {
       result TEXT CHECK (result IN ('home', 'away'))
     )
   `;
+  // prediction stores the team name the player thinks will WIN this match
   await sql`
-    CREATE TABLE IF NOT EXISTS knockout_predictions (
+    DROP TABLE IF EXISTS knockout_predictions
+  `;
+  await sql`
+    CREATE TABLE knockout_predictions (
       id SERIAL PRIMARY KEY,
       player_name TEXT NOT NULL,
       match_id INTEGER REFERENCES knockout_matches(id),
-      prediction TEXT NOT NULL CHECK (prediction IN ('home', 'away')),
+      prediction TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(player_name, match_id)
     )
