@@ -79,7 +79,17 @@ export async function POST(req: NextRequest) {
   log.push('Fetching group standings from Wikipedia…');
 
   for (const group of GROUP_NAMES) {
-    const html = await fetchWikiHtml(`2026 FIFA World Cup Group ${group}`);
+    // Try primary name first, then fallback variants
+    const pageCandidates = [
+      `2026 FIFA World Cup Group ${group}`,
+      `2026 FIFA World Cup group ${group}`,
+      `2026 FIFA World Cup Group ${group} (section)`,
+    ];
+    let html: string | null = null;
+    for (const page of pageCandidates) {
+      html = await fetchWikiHtml(page);
+      if (html) break;
+    }
     if (!html) {
       log.push(`  Group ${group}: page not found`);
       continue;

@@ -9,11 +9,26 @@ const WIKI_NAMES: Record<string, string> = {
   'Turkey': 'Türkiye',
   'DR Congo': 'DR Congo',
   'Democratic Republic of Congo': 'DR Congo',
+  'Democratic Republic of the Congo': 'DR Congo',
   'Republic of Congo': 'DR Congo',
+  'Congo DR': 'DR Congo',
+  'Czech Republic': 'Czechia',
+  'Curacao': 'Curaçao',
+  'Cape Verde Islands': 'Cape Verde',
+  'Kyrgyzstan': 'Uzbekistan', // just in case
+  'United States of America': 'United States',
+  'USA': 'United States',
 };
 
 export function normalizeName(raw: string): string {
-  const s = raw.trim().replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, '$1'); // strip wiki links
+  // Strip wiki markup: [[Link|Label]] → Label, [[Link]] → Link, {{...}} → ''
+  const s = raw
+    .trim()
+    .replace(/\{\{[^}]*\}\}/g, '')          // remove {{templates}}
+    .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2') // [[Link|Label]] → Label
+    .replace(/'''?/g, '')                   // remove bold/italic markers
+    .replace(/\(.*?\)/g, '')               // remove parenthetical qualifiers
+    .trim();
   return WIKI_NAMES[s] ?? s;
 }
 
@@ -31,19 +46,19 @@ function isSlotDescription(s: string): boolean {
     s.includes('Winner') ||
     s.includes('Runner-up') ||
     s.includes('Loser') ||
+    s.includes('{{') ||
+    s.includes('<!--') ||
     s === 'TBD' ||
     s === ''
   );
 }
 
 function parseScore(scoreField: string): 'home' | 'away' | null {
-  // {{score link|2–1|Match 73}} or {{score link|1–1 (a.e.t.) 4–2 p|Match 73}}
-  // First param before | is the actual score string
   const inner = scoreField.match(/\{\{score link\|([^|]+)\|/);
   if (!inner) return null;
   const scoreStr = inner[1].trim();
 
-  // Penalty shootout — decide on pen score, not 90-min score
+  // Penalty shootout
   const pen = scoreStr.match(/\((\d+)[–\-](\d+)\)\s*p/);
   if (pen) {
     return parseInt(pen[1]) > parseInt(pen[2]) ? 'home' : 'away';
@@ -63,7 +78,6 @@ function parseScore(scoreField: string): 'home' | 'away' | null {
 export function parseKnockoutWikitext(wikitext: string): Map<number, KOMatchData> {
   const results = new Map<number, KOMatchData>();
 
-  // Each match block: {{#invoke:football box|main ... }}
   const blockRe = /\{\{#invoke:football box\|main([\s\S]*?)\n\}\}/g;
 
   for (const block of wikitext.matchAll(blockRe)) {
@@ -73,7 +87,6 @@ export function parseKnockoutWikitext(wikitext: string): Map<number, KOMatchData
     const team2 = content.match(/\|\s*team2\s*=\s*([^\n|]+)/)?.[1]?.trim() ?? '';
     const scoreField = content.match(/\|\s*score\s*=\s*([^\n]+)/)?.[1]?.trim() ?? '';
 
-    // Match number lives inside the score link: {{score link|...|Match 73}}
     const matchNumStr = scoreField.match(/Match\s+(\d+)/)?.[1];
     if (!matchNumStr) continue;
     const matchNum = parseInt(matchNumStr);
@@ -97,17 +110,23 @@ export function parseKnockoutWikitext(wikitext: string): Map<number, KOMatchData
 
 // ── Group standings HTML parser ───────────────────────────────────────────────
 
-export type GroupStandings = Record<string, string[]>; // group → [1st, 2nd, 3rd, 4th]
+export type GroupStandings = Record<string, string[]>;
 
-// Fetch and parse a single group's Wikipedia page for final standings.
-// Returns teams in position order [1st, 2nd, 3rd, 4th], or [] if unavailable.
 export function parseGroupStandingsHtml(html: string, group: string): string[] {
   const root = parseHtml(html);
   const validTeams = new Set(GROUPS[group] ?? []);
-  const teams: string[] = [];
 
-  // Group tables on Wikipedia are class="wikitable"
-  // Team names are in the first <td> of each row, inside an <a> or directly
+  // Build a reverse map: any plausible Wikipedia name → our name
+  const anyMatch = (raw: string): string | null => {
+    const name = normalizeName(raw);
+    if (validTeams.has(name)) return name;
+    // Try partial match as a fallback (e.g. "Mexico national football team" → "Mexico")
+    for (const t of validTeams) {
+      if (name.includes(t) || t.includes(name)) return t;
+    }
+    return null;
+  };
+
   const tables = root.querySelectorAll('table.wikitable');
 
   for (const table of tables) {
@@ -116,21 +135,24 @@ export function parseGroupStandingsHtml(html: string, group: string): string[] {
 
     for (const row of rows) {
       const cells = row.querySelectorAll('td');
-      if (cells.length < 8) continue; // standings rows have Pld W D L GF GA GD Pts
+      // Standings rows have at least Pld W D L GF GA GD Pts (8 cols) plus team name
+      if (cells.length < 2) continue;
 
-      const firstCell = cells[0];
-      // Team name is in an <a> tag or plain text
-      const anchor = firstCell.querySelector('a');
-      const raw = anchor ? anchor.text : firstCell.text;
-      const name = normalizeName(raw.replace(/\(.*\)/, '').trim());
+      // Try first and second cells for the team name (some tables have a flag cell first)
+      let found: string | null = null;
+      for (let i = 0; i < Math.min(3, cells.length) && !found; i++) {
+        const cell = cells[i];
+        const anchor = cell.querySelector('a');
+        const raw = anchor ? anchor.text : cell.text;
+        found = anyMatch(raw);
+      }
 
-      if (validTeams.has(name)) candidates.push(name);
+      if (found && !candidates.includes(found)) candidates.push(found);
+      if (candidates.length === 4) break;
     }
 
-    if (candidates.length === 4) {
-      return candidates; // already in standings order (Wikipedia renders top-down)
-    }
+    if (candidates.length === 4) return candidates;
   }
 
-  return teams;
+  return [];
 }
