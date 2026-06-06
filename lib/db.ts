@@ -1,13 +1,16 @@
 import { Pool } from 'pg';
 
-// Connect directly to the DB host (not the pgBouncer pooler) to avoid
-// the self-signed cert in Supabase's pooler infrastructure.
+// Parse the pooler URL into individual params so sslmode=require in the
+// query string doesn't override our ssl config object.
+const rawUrl = process.env.STORAGE_POSTGRES_URL!;
+const parsed = new URL(rawUrl);
+
 const pool = new Pool({
-  host: process.env.STORAGE_POSTGRES_HOST,
-  user: process.env.STORAGE_POSTGRES_USER,
-  password: process.env.STORAGE_POSTGRES_PASSWORD,
-  database: process.env.STORAGE_POSTGRES_DATABASE ?? 'postgres',
-  port: 5432,
+  host: parsed.hostname,
+  port: Number(parsed.port),
+  user: decodeURIComponent(parsed.username),
+  password: decodeURIComponent(parsed.password),
+  database: parsed.pathname.replace(/^\//, ''),
   ssl: { rejectUnauthorized: false },
 });
 
