@@ -57,25 +57,16 @@ function makeResolver(
       const matchNum = parseInt(slot.slice(1));
       const match = matchesByNum.get(matchNum);
       if (match) {
-        const adminHome = cleanTeam(match.home_team);
-        const adminAway = cleanTeam(match.away_team);
-        if (match.result === "home" && adminHome) result = adminHome;
-        else if (match.result === "away" && adminAway) result = adminAway;
-        else result = koPreds[match.id] ?? null;
+        result = koPreds[match.id] ?? null;
       }
     } else if (slot.startsWith("L")) {
       const matchNum = parseInt(slot.slice(1));
       const match = matchesByNum.get(matchNum);
       if (match) {
-        const adminHome = cleanTeam(match.home_team);
-        const adminAway = cleanTeam(match.away_team);
-        const winner =
-          match.result === "home" ? adminHome :
-          match.result === "away" ? adminAway :
-          koPreds[match.id] ?? null;
+        const winner = koPreds[match.id] ?? null;
         if (winner) {
-          const home = adminHome ?? resolve(match.home_slot);
-          const away = adminAway ?? resolve(match.away_slot);
+          const home = resolve(match.home_slot);
+          const away = resolve(match.away_slot);
           result = winner === home ? away : winner === away ? home : null;
         }
       }
@@ -213,18 +204,17 @@ function MatchCard({
   resolve: (slot: string) => string | null;
   onPick: (matchId: number, team: string) => void;
 }) {
-  const adminHome = match.result ? cleanTeam(match.home_team) : null;
-  const adminAway = match.result ? cleanTeam(match.away_team) : null;
-
-  const expectedHome = adminHome ?? resolve(match.home_slot);
-  const expectedAway = adminAway ?? resolve(match.away_slot);
+  const expectedHome = resolve(match.home_slot);
+  const expectedAway = resolve(match.away_slot);
 
   const homeLabel = expectedHome ?? slotLabel(match.home_slot);
   const awayLabel = expectedAway ?? slotLabel(match.away_slot);
 
+  const adminHome = cleanTeam(match.home_team);
+  const adminAway = cleanTeam(match.away_team);
   const winner =
-    match.result === "home" ? (adminHome ?? expectedHome) :
-    match.result === "away" ? (adminAway ?? expectedAway) : null;
+    match.result === "home" ? adminHome :
+    match.result === "away" ? adminAway : null;
 
   const correct = !!prediction && !!winner && prediction === winner;
   const wrong   = !!prediction && !!winner && prediction !== winner;
