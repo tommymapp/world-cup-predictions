@@ -224,11 +224,11 @@ function ScoringGuide() {
             </div>
           </div>
           <div>
-            <p className="font-semibold text-gray-300 mb-1">Individual awards — 10 pts each</p>
+            <p className="font-semibold text-gray-300 mb-1">Individual awards — <span className="text-yellow-400">10 pts</span> each</p>
             <p>Golden Ball, Golden Boot, Golden Glove, Best Young Player, Goal of the Tournament.</p>
           </div>
           <div>
-            <p className="font-semibold text-gray-300 mb-1">Team of the Tournament — 5 pts each</p>
+            <p className="font-semibold text-gray-300 mb-1">Team of the Tournament — <span className="text-yellow-400">5 pts</span> each</p>
             <p>Pick the best GK, defenders, midfielders and forwards. 5 points per correct player.</p>
           </div>
         </div>
