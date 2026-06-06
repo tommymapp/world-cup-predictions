@@ -1,6 +1,6 @@
 // The 8 R32 knockout match numbers that have a 3rd-place team in the away slot,
 // in the order they appear as assignment columns in the Wikipedia table.
-export const THIRD_PLACE_MATCH_ORDER = [74, 77, 79, 80, 81, 82, 85, 87] as const;
+export const THIRD_PLACE_MATCH_ORDER = [79, 85, 81, 74, 82, 77, 87, 80] as const;
 
 // Extract group letters from a slot code like "3ABCDF"
 export function thirdPlaceGroups(slot: string): string[] {
